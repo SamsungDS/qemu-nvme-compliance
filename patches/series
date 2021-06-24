@@ -1,0 +1,3 @@
+boot-partitions/add-boot-partition-read-test.patch
+boot-partitions/add-support-for-boot-partitions.patch
+device-self-test/add-device-self-test-command-support.patch

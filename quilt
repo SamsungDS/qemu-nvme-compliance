@@ -1,0 +1,23 @@
+#!/bin/bash
+
+if ! command -v quilt &>/dev/null; then
+  >&2 echo "error: please install quilt"
+  exit 1
+fi
+
+QUILT_PATCHES="$(pwd)/patches"
+QUILT_SERIES="${QUILT_PATCHES}/series"
+QUILT_PC="$(pwd)/.pc"
+
+export QUILT_PATCHES QUILT_SERIES QUILT_PC
+
+: "${SRCDIR:="src"}"
+
+if [[ ! -d "$SRCDIR" ]]; then
+  >&2 echo "error: '$SRCDIR' does not exist"
+  exit 1
+fi
+
+pushd "$SRCDIR" >/dev/null || exit
+quilt "$@"
+popd >/dev/null || exit
