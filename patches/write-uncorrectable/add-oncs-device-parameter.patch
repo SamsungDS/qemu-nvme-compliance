@@ -1,40 +1,33 @@
-From: Gollu Appalanaidu <anaidu.gollu@samsung.com>
-
 Add the 'oncs' nvme device parameter to allow optional features to be
 enabled/disabled explicitly. Since most of these are optional commands,
 make the CSE log pages dynamic to account for the value of ONCS.
 
 Signed-off-by: Gollu Appalanaidu <anaidu.gollu@samsung.com>
 Signed-off-by: Klaus Jensen <k.jensen@samsung.com>
----
- hw/block/nvme.h |   7 ++++
- hw/block/nvme.c | 101 ++++++++++++++++++++++++++++++++----------------
- 2 files changed, 74 insertions(+), 34 deletions(-)
-
-Index: src/hw/block/nvme.h
+Index: src/hw/nvme/nvme.h
 ===================================================================
---- src.orig/hw/block/nvme.h
-+++ src/hw/block/nvme.h
-@@ -8,6 +8,7 @@
- 
- #define NVME_DEFAULT_ZONE_SIZE   (128 * MiB)
- #define NVME_DEFAULT_MAX_ZA_SIZE (128 * KiB)
+--- src.orig/hw/nvme/nvme.h
++++ src/hw/nvme/nvme.h
+@@ -27,6 +27,7 @@
+ #define NVME_MAX_CONTROLLERS 32
+ #define NVME_MAX_NAMESPACES  256
+ #define NVME_EUI64_DEFAULT ((uint64_t)0x5254000000000000)
 +#define NVME_MAX_COMMANDS 0x100
  
- typedef struct NvmeParams {
-     char     *serial;
-@@ -22,6 +23,7 @@ typedef struct NvmeParams {
-     bool     use_intel_id;
+ QEMU_BUILD_BUG_ON(NVME_MAX_NAMESPACES > NVME_NSID_BROADCAST - 1);
+ 
+@@ -391,6 +392,7 @@ typedef struct NvmeParams {
      uint8_t  zasl;
+     bool     auto_transition_zones;
      bool     legacy_cmb;
 +    uint16_t oncs;
  } NvmeParams;
  
- typedef struct NvmeAsyncEvent {
-@@ -231,6 +233,11 @@ typedef struct NvmeCtrl {
-     NvmeIdCtrl      id_ctrl;
-     NvmeFeatureVal  features;
-     NvmeDst         dst;
+ typedef struct NvmeDst {
+@@ -477,6 +479,11 @@ typedef struct NvmeCtrl {
+     } features;
+ 
+     NvmeDst dst;
 +
 +    struct {
 +        uint32_t nvm[NVME_MAX_COMMANDS];
@@ -43,11 +36,11 @@ Index: src/hw/block/nvme.h
  } NvmeCtrl;
  
  static inline NvmeNamespace *nvme_ns(NvmeCtrl *n, uint32_t nsid)
-Index: src/hw/block/nvme.c
+Index: src/hw/nvme/ctrl.c
 ===================================================================
---- src.orig/hw/block/nvme.c
-+++ src/hw/block/nvme.c
-@@ -97,6 +97,11 @@
+--- src.orig/hw/nvme/ctrl.c
++++ src/hw/nvme/ctrl.c
+@@ -112,6 +112,11 @@
   *   device stores platform initialization code. Its size shall be in 256 KiB
   *   units.
   *
@@ -59,8 +52,8 @@ Index: src/hw/block/nvme.c
   * nvme namespace device parameters
   * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   * - `shared`
-@@ -202,7 +207,7 @@ static const uint32_t nvme_feature_cap[N
-     [NVME_TIMESTAMP]                = NVME_FEAT_CAP_CHANGE,
+@@ -214,7 +219,7 @@ static const uint32_t nvme_feature_cap[N
+     [NVME_COMMAND_SET_PROFILE]      = NVME_FEAT_CAP_CHANGE,
  };
  
 -static const uint32_t nvme_cse_acs[256] = {
@@ -68,7 +61,7 @@ Index: src/hw/block/nvme.c
      [NVME_ADM_CMD_DELETE_SQ]        = NVME_CMD_EFF_CSUPP,
      [NVME_ADM_CMD_CREATE_SQ]        = NVME_CMD_EFF_CSUPP,
      [NVME_ADM_CMD_GET_LOG_PAGE]     = NVME_CMD_EFF_CSUPP,
-@@ -220,32 +225,7 @@ static const uint32_t nvme_cse_acs[256]
+@@ -232,32 +237,7 @@ static const uint32_t nvme_cse_acs[256]
      [NVME_ADM_CMD_COMMIT_FW]        = NVME_CMD_EFF_CSUPP,
  };
  
@@ -102,9 +95,9 @@ Index: src/hw/block/nvme.c
  
  static void nvme_process_sq(void *opaque);
  
-@@ -3984,17 +3964,17 @@ static uint16_t nvme_cmd_effects(NvmeCtr
+@@ -4221,17 +4201,17 @@ static uint16_t nvme_cmd_effects(NvmeCtr
  
-     switch (NVME_CC_CSS(n->bar.cc)) {
+     switch (NVME_CC_CSS(ldl_le_p(&n->bar.cc))) {
      case NVME_CC_CSS_NVM:
 -        src_iocs = nvme_cse_iocs_nvm;
 +        src_iocs = n->iocs.nvm;
@@ -123,7 +116,7 @@ Index: src/hw/block/nvme.c
              break;
          }
      }
-@@ -4629,6 +4609,10 @@ static uint16_t nvme_get_feature(NvmeCtr
+@@ -4883,6 +4863,10 @@ static uint16_t nvme_get_feature(NvmeCtr
          return NVME_INVALID_FIELD | NVME_DNR;
      }
  
@@ -134,7 +127,7 @@ Index: src/hw/block/nvme.c
      if (nvme_feature_cap[fid] & NVME_FEAT_CAP_NS) {
          if (!nvme_nsid_valid(n, nsid) || nsid == NVME_NSID_BROADCAST) {
              /*
-@@ -4711,6 +4695,9 @@ static uint16_t nvme_get_feature(NvmeCtr
+@@ -4965,6 +4949,9 @@ static uint16_t nvme_get_feature(NvmeCtr
          result = n->features.async_config;
          goto out;
      case NVME_TIMESTAMP:
@@ -144,7 +137,7 @@ Index: src/hw/block/nvme.c
          return nvme_get_feature_timestamp(n, req);
      default:
          break;
-@@ -4792,6 +4779,10 @@ static uint16_t nvme_set_feature(NvmeCtr
+@@ -5043,6 +5030,10 @@ static uint16_t nvme_set_feature(NvmeCtr
          return NVME_FID_NOT_SAVEABLE | NVME_DNR;
      }
  
@@ -155,7 +148,7 @@ Index: src/hw/block/nvme.c
      if (!nvme_feature_support[fid]) {
          return NVME_INVALID_FIELD | NVME_DNR;
      }
-@@ -4904,6 +4895,9 @@ static uint16_t nvme_set_feature(NvmeCtr
+@@ -5155,6 +5146,9 @@ static uint16_t nvme_set_feature(NvmeCtr
          n->features.async_config = dw11;
          break;
      case NVME_TIMESTAMP:
@@ -165,25 +158,25 @@ Index: src/hw/block/nvme.c
          return nvme_set_feature_timestamp(n, req);
      case NVME_COMMAND_SET_PROFILE:
          if (dw11 & 0x1ff) {
-@@ -5489,14 +5483,14 @@ static void __nvme_select_ns_iocs(NvmeCt
+@@ -5210,14 +5204,14 @@ static void nvme_select_iocs_ns(NvmeCtrl
      switch (ns->csi) {
      case NVME_CSI_NVM:
-         if (NVME_CC_CSS(n->bar.cc) != NVME_CC_CSS_ADMIN_ONLY) {
+         if (NVME_CC_CSS(cc) != NVME_CC_CSS_ADMIN_ONLY) {
 -            ns->iocs = nvme_cse_iocs_nvm;
 +            ns->iocs = n->iocs.nvm;
          }
          break;
      case NVME_CSI_ZONED:
-         if (NVME_CC_CSS(n->bar.cc) == NVME_CC_CSS_CSI) {
+         if (NVME_CC_CSS(cc) == NVME_CC_CSS_CSI) {
 -            ns->iocs = nvme_cse_iocs_zoned;
 +            ns->iocs = n->iocs.zoned;
-         } else if (NVME_CC_CSS(n->bar.cc) == NVME_CC_CSS_NVM) {
+         } else if (NVME_CC_CSS(cc) == NVME_CC_CSS_NVM) {
 -            ns->iocs = nvme_cse_iocs_nvm;
 +            ns->iocs = n->iocs.nvm;
          }
          break;
      }
-@@ -6173,6 +6167,44 @@ static void nvme_check_constraints(NvmeC
+@@ -6528,6 +6522,44 @@ static void nvme_check_constraints(NvmeC
      }
  }
  
@@ -227,8 +220,8 @@ Index: src/hw/block/nvme.c
 +
  static void nvme_init_state(NvmeCtrl *n)
  {
-     n->num_namespaces = NVME_MAX_NAMESPACES;
-@@ -6186,6 +6218,8 @@ static void nvme_init_state(NvmeCtrl *n)
+     /* add one to max_ioqpairs to account for the admin queue pair */
+@@ -6540,6 +6572,8 @@ static void nvme_init_state(NvmeCtrl *n)
      n->starttime_ms = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL);
      n->aer_reqs = g_new0(NvmeRequest *, n->params.aerl + 1);
  
@@ -237,10 +230,10 @@ Index: src/hw/block/nvme.c
      QTAILQ_INIT(&n->dst.dst_list);
  
      while (n->dst.num_entries < NVME_DST_MAX_ENTRIES) {
-@@ -6369,9 +6403,7 @@ static void nvme_init_ctrl(NvmeCtrl *n,
+@@ -6729,9 +6763,7 @@ static void nvme_init_ctrl(NvmeCtrl *n,
      id->sqes = (0x6 << 4) | 0x6;
      id->cqes = (0x4 << 4) | 0x4;
-     id->nn = cpu_to_le32(n->num_namespaces);
+     id->nn = cpu_to_le32(NVME_MAX_NAMESPACES);
 -    id->oncs = cpu_to_le16(NVME_ONCS_WRITE_ZEROES | NVME_ONCS_TIMESTAMP |
 -                           NVME_ONCS_FEATURES | NVME_ONCS_DSM |
 -                           NVME_ONCS_COMPARE | NVME_ONCS_COPY);
@@ -248,15 +241,15 @@ Index: src/hw/block/nvme.c
  
      /*
       * NOTE: If this device ever supports a command set that does NOT use 0x0
-@@ -6580,6 +6612,11 @@ static Property nvme_props[] = {
-     DEFINE_PROP_BOOL("use-intel-id", NvmeCtrl, params.use_intel_id, false),
-     DEFINE_PROP_BOOL("legacy-cmb", NvmeCtrl, params.legacy_cmb, false),
-     DEFINE_PROP_UINT8("zoned.zasl", NvmeCtrl, params.zasl, 0),
+@@ -6942,6 +6974,11 @@ static Property nvme_props[] = {
+     DEFINE_PROP_UINT32("aer_max_queued", NvmeCtrl, params.aer_max_queued, 64),
+     DEFINE_PROP_UINT8("mdts", NvmeCtrl, params.mdts, 7),
+     DEFINE_PROP_UINT8("vsl", NvmeCtrl, params.vsl, 7),
 +    DEFINE_PROP_UINT16("oncs", NvmeCtrl, params.oncs, NVME_ONCS_WRITE_ZEROES |
 +                       NVME_ONCS_TIMESTAMP | NVME_ONCS_DSM |
 +                       NVME_ONCS_COMPARE | NVME_ONCS_FEATURES |
 +                       NVME_ONCS_COPY | NVME_ONCS_VERIFY |
 +                       NVME_ONCS_WRITE_UNCORR),
-     DEFINE_PROP_END_OF_LIST(),
- };
- 
+     DEFINE_PROP_BOOL("use-intel-id", NvmeCtrl, params.use_intel_id, false),
+     DEFINE_PROP_BOOL("legacy-cmb", NvmeCtrl, params.legacy_cmb, false),
+     DEFINE_PROP_UINT8("zoned.zasl", NvmeCtrl, params.zasl, 0),

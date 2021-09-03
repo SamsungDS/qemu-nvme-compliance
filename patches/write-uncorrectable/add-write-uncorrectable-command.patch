@@ -1,5 +1,3 @@
-From: Gollu Appalanaidu <anaidu.gollu@samsung.com>
-
 Add support for marking blocks invalid with the Write Uncorrectable
 command. Block status is tracked in a (non-persistent) bitmap that is
 checked on all reads and written to on all writes. This is potentially
@@ -7,20 +5,11 @@ expensive, so keep Write Uncorrectable disabled by default.
 
 Signed-off-by: Gollu Appalanaidu <anaidu.gollu@samsung.com>
 Signed-off-by: Klaus Jensen <k.jensen@samsung.com>
----
- docs/specs/nvme.txt   |  3 ++
- hw/block/nvme-ns.h    |  2 ++
- hw/block/nvme.h       |  1 +
- hw/block/nvme-ns.c    |  2 ++
- hw/block/nvme.c       | 65 +++++++++++++++++++++++++++++++++++++------
- hw/block/trace-events |  1 +
- 6 files changed, 66 insertions(+), 8 deletions(-)
-
-Index: src/hw/block/nvme-ns.h
+Index: src/hw/nvme/nvme.h
 ===================================================================
---- src.orig/hw/block/nvme-ns.h
-+++ src/hw/block/nvme-ns.h
-@@ -84,6 +84,8 @@ typedef struct NvmeNamespace {
+--- src.orig/hw/nvme/nvme.h
++++ src/hw/nvme/nvme.h
+@@ -152,6 +152,8 @@ typedef struct NvmeNamespace {
      struct {
          uint32_t err_rec;
      } features;
@@ -28,24 +17,12 @@ Index: src/hw/block/nvme-ns.h
 +    unsigned long *uncorrectable;
  } NvmeNamespace;
  
- static inline uint16_t nvme_ns_status(NvmeNamespace *ns)
-Index: src/hw/block/nvme.h
+ static inline uint32_t nvme_nsid(NvmeNamespace *ns)
+Index: src/hw/nvme/ns.c
 ===================================================================
---- src.orig/hw/block/nvme.h
-+++ src/hw/block/nvme.h
-@@ -92,6 +92,7 @@ static inline const char *nvme_io_opc_st
-     case NVME_CMD_FLUSH:            return "NVME_NVM_CMD_FLUSH";
-     case NVME_CMD_WRITE:            return "NVME_NVM_CMD_WRITE";
-     case NVME_CMD_READ:             return "NVME_NVM_CMD_READ";
-+    case NVME_CMD_WRITE_UNCOR:      return "NVME_CMD_WRITE_UNCOR";
-     case NVME_CMD_COMPARE:          return "NVME_NVM_CMD_COMPARE";
-     case NVME_CMD_WRITE_ZEROES:     return "NVME_NVM_CMD_WRITE_ZEROES";
-     case NVME_CMD_DSM:              return "NVME_NVM_CMD_DSM";
-Index: src/hw/block/nvme-ns.c
-===================================================================
---- src.orig/hw/block/nvme-ns.c
-+++ src/hw/block/nvme-ns.c
-@@ -137,6 +137,8 @@ static int nvme_ns_init(NvmeNamespace *n
+--- src.orig/hw/nvme/ns.c
++++ src/hw/nvme/ns.c
+@@ -134,6 +134,8 @@ static int nvme_ns_init(NvmeNamespace *n
  lbaf_found:
      nvme_ns_init_format(ns);
  
@@ -54,11 +31,20 @@ Index: src/hw/block/nvme-ns.c
      return 0;
  }
  
-Index: src/hw/block/nvme.c
+@@ -434,6 +436,8 @@ void nvme_ns_shutdown(NvmeNamespace *ns)
+ 
+ void nvme_ns_cleanup(NvmeNamespace *ns)
+ {
++    g_free(ns->uncorrectable);
++
+     if (ns->params.zoned) {
+         g_free(ns->id_ns_zoned);
+         g_free(ns->zone_array);
+Index: src/hw/nvme/ctrl.c
 ===================================================================
---- src.orig/hw/block/nvme.c
-+++ src/hw/block/nvme.c
-@@ -1464,6 +1464,20 @@ static uint16_t nvme_check_dulbe(NvmeNam
+--- src.orig/hw/nvme/ctrl.c
++++ src/hw/nvme/ctrl.c
+@@ -1504,6 +1504,20 @@ static uint16_t nvme_check_dulbe(NvmeNam
      return NVME_SUCCESS;
  }
  
@@ -79,7 +65,7 @@ Index: src/hw/block/nvme.c
  static void nvme_aio_err(NvmeRequest *req, int ret)
  {
      uint16_t status = NVME_SUCCESS;
-@@ -1791,6 +1805,7 @@ void nvme_rw_complete_cb(void *opaque, i
+@@ -1868,6 +1882,7 @@ void nvme_rw_complete_cb(void *opaque, i
      BlockBackend *blk = ns->blkconf.blk;
      BlockAcctCookie *acct = &req->acct;
      BlockAcctStats *stats = blk_get_stats(blk);
@@ -87,7 +73,7 @@ Index: src/hw/block/nvme.c
  
      trace_pci_nvme_rw_complete_cb(nvme_cid(req), blk_name(blk));
  
-@@ -1799,9 +1814,17 @@ void nvme_rw_complete_cb(void *opaque, i
+@@ -1876,9 +1891,17 @@ void nvme_rw_complete_cb(void *opaque, i
          nvme_aio_err(req, ret);
      } else {
          block_acct_done(stats, acct);
@@ -106,29 +92,16 @@ Index: src/hw/block/nvme.c
          nvme_finalize_zoned_write(ns, req);
      }
  
-@@ -2124,6 +2147,8 @@ static void nvme_copy_complete_cb(void *
- {
-     NvmeRequest *req = opaque;
-     NvmeNamespace *ns = req->ns;
-+    NvmeCopyCmd *copy = (NvmeCopyCmd *)&req->cmd;
-+    uint64_t sdlba = le64_to_cpu(copy->sdlba);
-     struct nvme_copy_ctx *ctx = req->opaque;
- 
-     if (ret) {
-@@ -2133,11 +2158,10 @@ static void nvme_copy_complete_cb(void *
+@@ -2509,6 +2532,8 @@ static void nvme_copy_out_completed_cb(v
+         nvme_advance_zone_wp(ns, iocb->zone, nlb);
      }
  
-     block_acct_done(blk_get_stats(ns->blkconf.blk), &req->acct);
-+    bitmap_clear(ns->uncorrectable, sdlba, ctx->nlb);
- 
++    bitmap_clear(ns->uncorrectable, iocb->slba, nlb);
++
+     iocb->idx++;
+     iocb->slba += nlb;
  out:
-     if (ns->params.zoned) {
--        NvmeCopyCmd *copy = (NvmeCopyCmd *)&req->cmd;
--        uint64_t sdlba = le64_to_cpu(copy->sdlba);
-         NvmeZone *zone = nvme_get_zone_by_slba(ns, sdlba);
- 
-         __nvme_advance_zone_wp(ns, zone, ctx->nlb);
-@@ -2931,6 +2955,12 @@ static uint16_t nvme_read(NvmeCtrl *n, N
+@@ -3083,6 +3108,12 @@ static uint16_t nvme_read(NvmeCtrl *n, N
          goto invalid;
      }
  
@@ -141,7 +114,7 @@ Index: src/hw/block/nvme.c
      if (ns->params.zoned) {
          status = nvme_check_zone_read(ns, slba, nlb);
          if (status) {
-@@ -2968,7 +2998,7 @@ invalid:
+@@ -3120,7 +3151,7 @@ invalid:
  }
  
  static uint16_t nvme_do_write(NvmeCtrl *n, NvmeRequest *req, bool append,
@@ -150,7 +123,7 @@ Index: src/hw/block/nvme.c
  {
      NvmeRwCmd *rw = (NvmeRwCmd *)&req->cmd;
      NvmeNamespace *ns = req->ns;
-@@ -2998,7 +3028,7 @@ static uint16_t nvme_do_write(NvmeCtrl *
+@@ -3151,7 +3182,7 @@ static uint16_t nvme_do_write(NvmeCtrl *
      trace_pci_nvme_write(nvme_cid(req), nvme_io_opc_str(rw->opcode),
                           nvme_nsid(ns), nlb, mapped_size, slba);
  
@@ -159,7 +132,7 @@ Index: src/hw/block/nvme.c
          status = nvme_check_mdts(n, mapped_size);
          if (status) {
              goto invalid;
-@@ -3071,6 +3101,11 @@ static uint16_t nvme_do_write(NvmeCtrl *
+@@ -3224,6 +3255,11 @@ static uint16_t nvme_do_write(NvmeCtrl *
          zone->w_ptr += nlb;
      }
  
@@ -171,7 +144,7 @@ Index: src/hw/block/nvme.c
      data_offset = nvme_l2b(ns, slba);
  
      if (NVME_ID_NS_DPS_TYPE(ns->id_ns.dps)) {
-@@ -3101,17 +3136,22 @@ invalid:
+@@ -3254,17 +3290,22 @@ invalid:
  
  static inline uint16_t nvme_write(NvmeCtrl *n, NvmeRequest *req)
  {
@@ -197,7 +170,7 @@ Index: src/hw/block/nvme.c
  }
  
  static uint16_t nvme_get_mgmt_zone_slba_idx(NvmeNamespace *ns, NvmeCmd *c,
-@@ -3635,6 +3675,8 @@ static uint16_t nvme_io_cmd(NvmeCtrl *n,
+@@ -3887,6 +3928,8 @@ static uint16_t nvme_io_cmd(NvmeCtrl *n,
      switch (req->cmd.opcode) {
      case NVME_CMD_WRITE_ZEROES:
          return nvme_write_zeroes(n, req);
@@ -206,7 +179,7 @@ Index: src/hw/block/nvme.c
      case NVME_CMD_ZONE_APPEND:
          return nvme_zone_append(n, req);
      case NVME_CMD_WRITE:
-@@ -6175,6 +6217,11 @@ static void nvme_init_cse_iocs(NvmeCtrl
+@@ -6530,6 +6573,11 @@ static void nvme_init_cse_iocs(NvmeCtrl
      n->iocs.nvm[NVME_CMD_WRITE] = NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_LBCC;
      n->iocs.nvm[NVME_CMD_READ]  = NVME_CMD_EFF_CSUPP;
  
@@ -218,19 +191,11 @@ Index: src/hw/block/nvme.c
      if (oncs & NVME_ONCS_WRITE_ZEROES) {
          n->iocs.nvm[NVME_CMD_WRITE_ZEROES] = NVME_CMD_EFF_CSUPP |
              NVME_CMD_EFF_LBCC;
-@@ -6568,6 +6615,7 @@ static void nvme_exit(PCIDevice *pci_dev
-         }
- 
-         nvme_ns_cleanup(ns);
-+        g_free(ns->uncorrectable);
-     }
- 
-     g_free(n->cq);
-Index: src/hw/block/trace-events
+Index: src/hw/nvme/trace-events
 ===================================================================
---- src.orig/hw/block/trace-events
-+++ src/hw/block/trace-events
-@@ -185,6 +185,7 @@ pci_nvme_err_invalid_prp2_align(uint64_t
+--- src.orig/hw/nvme/trace-events
++++ src/hw/nvme/trace-events
+@@ -130,6 +130,7 @@ pci_nvme_err_invalid_prp2_align(uint64_t
  pci_nvme_err_invalid_opc(uint8_t opc) "invalid opcode 0x%"PRIx8""
  pci_nvme_err_invalid_admin_opc(uint8_t opc) "invalid admin opcode 0x%"PRIx8""
  pci_nvme_err_invalid_lba_range(uint64_t start, uint64_t len, uint64_t limit) "Invalid LBA start=%"PRIu64" len=%"PRIu64" limit=%"PRIu64""

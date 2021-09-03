@@ -1,5 +1,5 @@
-boot-partitions/add-boot-partition-read-test.patch
 boot-partitions/add-support-for-boot-partitions.patch
+boot-partitions/add-boot-partition-read-test.patch
 device-self-test/add-device-self-test-command-support.patch
 write-uncorrectable/add-oncs-device-parameter.patch
 write-uncorrectable/add-write-uncorrectable-command.patch

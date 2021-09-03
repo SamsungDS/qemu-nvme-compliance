@@ -7,12 +7,12 @@ These patches may be useful for compliance testing.
 
 ## Quick Start
 
-Currently supported version of QEMU is `v6.0.0`. You may be able to apply the
+Currently supported version of QEMU is `v6.1.0`. You may be able to apply the
 patches to later versions or master.
 
 Download the supported version to the local directory and extract the sources.
 
-    $ wget https://download.qemu.org/qemu-6.0.0.tar.xz
+    $ wget https://download.qemu.org/qemu-6.1.0.tar.xz
     $ mkdir src
     $ tar -Jxf qemu-6.0.0.tar.xz -C src --strip-components=1
 
