@@ -1,0 +1,298 @@
+Adding Namespace Write Protect and HMP command for power cycle
+
+Signed-off-by: Padmakar Kalghatgi <p.kalghatgi@samsung.com>
+Index: src/hmp-commands.hx
+===================================================================
+--- src.orig/hmp-commands.hx
++++ src/hmp-commands.hx
+@@ -1717,8 +1717,23 @@ SRST
+   When there is no preceding snapshot or the execution is not replayed,
+   then the command fails.
+   *icount* for the reference may be observed with ``info replay`` command.
++
++ERST
++
++    {
++        .name       = "hmp_nvme_issue_power_cycle",
++        .args_type  = "id:s",
++        .params     = "id",
++        .help       = "issue power cycle",
++        .cmd        = hmp_nvme_issue_power_cycle,
++    },
++
++SRST
++``hmp_nvme_issue_power_cycle``
++  Issue power cycle to nvme device
+ ERST
+ 
++
+     {
+         .name       = "info",
+         .args_type  = "item:s?",
+Index: src/hw/nvme/ctrl.c
+===================================================================
+--- src.orig/hw/nvme/ctrl.c
++++ src/hw/nvme/ctrl.c
+@@ -172,6 +172,8 @@
+ #include "sysemu/hostmem.h"
+ #include "hw/pci/msix.h"
+ #include "migration/vmstate.h"
++#include "qapi/qmp/qdict.h"
++#include "monitor/hmp.h"
+ 
+ #include "nvme.h"
+ #include "trace.h"
+@@ -206,6 +208,7 @@ static const bool nvme_feature_support[N
+     [NVME_WRITE_ATOMICITY]          = true,
+     [NVME_ASYNCHRONOUS_EVENT_CONF]  = true,
+     [NVME_TIMESTAMP]                = true,
++    [NVME_NS_WRITE_PROTECTION]      = true,
+     [NVME_COMMAND_SET_PROFILE]      = true,
+     [NVME_HOST_IDENTIFIER]          = true,
+     [NVME_RESERVATION_NOTICE_MASK]  = true,
+@@ -2447,6 +2450,10 @@ static uint16_t nvme_dsm(NvmeCtrl *n, Nv
+     uint32_t nr = (le32_to_cpu(dsm->nr) & 0xff) + 1;
+     uint16_t status = NVME_SUCCESS;
+ 
++    if (ns->id_ns.nsattr & 0x1) {
++        return NVME_NS_WRITE_PROT | NVME_DNR;
++    }
++
+     trace_pci_nvme_dsm(nr, attr);
+ 
+     if (n->subsys) {
+@@ -3575,6 +3582,10 @@ static uint16_t nvme_read(NvmeCtrl *n, N
+     BlockBackend *blk = ns->blkconf.blk;
+     uint16_t status;
+ 
++    if ((ns->id_ns.nsattr & 0x1) == 1) {
++        return NVME_NS_WRITE_PROT | NVME_DNR;
++    }
++
+     if (nvme_ns_ext(ns)) {
+         mapped_size += nvme_m2b(ns, nlb);
+ 
+@@ -5539,6 +5550,13 @@ static uint16_t nvme_get_feature(NvmeCtr
+             return NVME_INVALID_FIELD | NVME_DNR;
+         }
+         return nvme_get_feature_timestamp(n, req);
++    case NVME_NS_WRITE_PROTECTION:
++        ns = nvme_ns(n, nsid);
++        if (!nvme_nsid_valid(n, nsid)) {
++            return NVME_INVALID_NSID | NVME_DNR;
++        }
++        result = cpu_to_le32(ns->nwps);
++        break;
+     case NVME_HOST_IDENTIFIER:
+         nvme_c2h(n, (uint8_t *)&n->features.hostid, sizeof(n->features.hostid), req);
+         break;
+@@ -5632,6 +5650,7 @@ static uint16_t nvme_set_feature(NvmeCtr
+     NvmeSubsystem *subsys;
+     NvmeReservations *res;
+     uint64_t curr_host_id, prev_host_id;
++    uint8_t nwps_local;
+     uint16_t ret;
+     int i;
+ 
+@@ -5809,6 +5828,37 @@ static uint16_t nvme_set_feature(NvmeCtr
+             return NVME_CMD_SET_CMB_REJECTED | NVME_DNR;
+         }
+         break;
++    case NVME_NS_WRITE_PROTECTION:
++        ns = nvme_ns(n, nsid);
++        if (!nvme_nsid_valid(n, nsid)) {
++            return NVME_INVALID_NSID | NVME_DNR;
++        }
++
++        nwps_local = dw11 & 0x3;
++
++        if (((n->id_ctrl.nwpc & NVME_NS_WR_PROTECT_MASK) == 0 &&
++             nwps_local == NVME_NS_WR_PROTECT) ||
++           ((n->id_ctrl.nwpc & NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE_MASK)  == 0 &&
++             nwps_local == NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE) ||
++           ((n->id_ctrl.nwpc & NVME_NS_PERM_WR_PROTECT_MASK)  == 0 &&
++             nwps_local == NVME_NS_PERM_WR_PROTECT) ||
++           (nwps_local > NVME_NS_PERM_WR_PROTECT)) {
++            return NVME_INVALID_FIELD | NVME_DNR;
++        }
++        if (ns->nwps == NVME_NS_PERM_WR_PROTECT &&
++            nwps_local < NVME_NS_PERM_WR_PROTECT) {
++            return NVME_FEAT_NOT_CHANGEABLE | NVME_DNR;
++        }
++
++        if (ns->nwps == NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE &&
++            nwps_local < NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE) {
++            return NVME_FEAT_NOT_CHANGEABLE | NVME_DNR;
++        }
++
++        ns->id_ns.nsattr = nwps_local > 0 ? 1 : 0;
++        ns->nwps = nwps_local;
++
++        break;
+     default:
+         return NVME_FEAT_NOT_CHANGEABLE | NVME_DNR;
+     }
+@@ -7440,6 +7490,7 @@ static void nvme_init_ctrl(NvmeCtrl *n,
+     id->vwc = NVME_VWC_NSID_BROADCAST_SUPPORT | NVME_VWC_PRESENT;
+ 
+     id->ocfs = cpu_to_le16(NVME_OCFS_COPY_FORMAT_0);
++    id->nwpc = NVME_NS_WR_PROTECT_MASK | NVME_NS_PERM_WR_PROTECT_MASK;
+     id->sgls = cpu_to_le32(NVME_CTRL_SGLS_SUPPORT_NO_ALIGN |
+                            NVME_CTRL_SGLS_BITBUCKET);
+ 
+@@ -7535,6 +7586,40 @@ void nvme_attach_ns(NvmeCtrl *n, NvmeNam
+                             BDRV_REQUEST_MAX_BYTES / nvme_l2b(ns, 1));
+ }
+ 
++static void nvme_power_cycle(NvmeCtrl *n)
++{
++    for (uint32_t cntlid = 0; cntlid < ARRAY_SIZE(n->subsys->ctrls); cntlid++) {
++        NvmeCtrl *ctrl = nvme_subsys_ctrl(n->subsys, cntlid);
++        if (!ctrl) {
++            continue;
++        }
++        for (int nsid = 1; nsid <= NVME_MAX_NAMESPACES; nsid++) {
++            NvmeNamespace *ns = nvme_ns(ctrl, nsid);
++            if (!ns) {
++                continue;
++            }
++            if (ns->nwps == NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE) {
++                ns->nwps = 0;
++                ns->id_ns.nsattr = 0;
++            }
++        }
++    }
++}
++
++void hmp_nvme_issue_power_cycle(Monitor *mon, const QDict *qdict)
++{
++    const char *id = qdict_get_str(qdict, "id");
++    NvmeCtrl *n;
++    DeviceState *dev;
++
++    dev = qdev_find_recursive(sysbus_get_default(), id);
++    if (!dev) {
++        return;
++    }
++    n = NVME(dev);
++    nvme_power_cycle(n);
++}
++
+ static void nvme_realize(PCIDevice *pci_dev, Error **errp)
+ {
+     NvmeCtrl *n = NVME(pci_dev);
+Index: src/hw/nvme/ns.c
+===================================================================
+--- src.orig/hw/nvme/ns.c
++++ src/hw/nvme/ns.c
+@@ -101,6 +101,11 @@ static int nvme_ns_init(NvmeNamespace *n
+     if (ns->params.pi && ns->params.pil) {
+         id_ns->dps |= NVME_ID_NS_DPS_FIRST_EIGHT;
+     }
++    /* update the namespace write protect state */
++    if (ns->params.perm_wr_protect) {
++        ns->nwps = NVME_NS_PERM_WR_PROTECT;
++        id_ns->nsattr = 1;
++    }
+ 
+     static const NvmeLBAF lbaf[16] = {
+         [0] = { .ds =  9           },
+@@ -563,6 +568,8 @@ static Property nvme_ns_props[] = {
+                        params.zd_extension_size, 0),
+     DEFINE_PROP_BOOL("eui64-default", NvmeNamespace, params.eui64_default,
+                      true),
++    DEFINE_PROP_BOOL("perm_wr_protect", NvmeNamespace,
++                      params.perm_wr_protect, false),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+Index: src/hw/nvme/nvme.h
+===================================================================
+--- src.orig/hw/nvme/nvme.h
++++ src/hw/nvme/nvme.h
+@@ -126,6 +126,7 @@ typedef struct NvmeNamespaceParams {
+     uint32_t max_active_zones;
+     uint32_t max_open_zones;
+     uint32_t zd_extension_size;
++    bool     perm_wr_protect;
+ } NvmeNamespaceParams;
+ 
+ typedef struct NvmeNamespace {
+@@ -167,6 +168,7 @@ typedef struct NvmeNamespace {
+     } features;
+ 
+     unsigned long *uncorrectable;
++    uint8_t nwps;
+ } NvmeNamespace;
+ 
+ static inline uint32_t nvme_nsid(NvmeNamespace *ns)
+Index: src/include/block/nvme.h
+===================================================================
+--- src.orig/include/block/nvme.h
++++ src/include/block/nvme.h
+@@ -994,6 +994,7 @@ enum NvmeStatusCodes {
+     NVME_INVALID_USE_OF_CMB     = 0x0012,
+     NVME_INVALID_PRP_OFFSET     = 0x0013,
+     NVME_HOST_ID_INCONSISTENT   = 0x0018,
++    NVME_NS_WRITE_PROT          = 0x0020,
+     NVME_CMD_SET_CMB_REJECTED   = 0x002b,
+     NVME_INVALID_CMD_SET        = 0x002c,
+     NVME_LBA_RANGE              = 0x0080,
+@@ -1264,7 +1265,7 @@ typedef struct QEMU_PACKED NvmeIdCtrl {
+     uint16_t    awun;
+     uint16_t    awupf;
+     uint8_t     nvscc;
+-    uint8_t     rsvd531;
++    uint8_t     nwpc;
+     uint16_t    acwu;
+     uint16_t    ocfs;
+     uint32_t    sgls;
+@@ -1408,6 +1409,7 @@ enum NvmeFeatureIds {
+     NVME_SOFTWARE_PROGRESS_MARKER   = 0x80,
+     NVME_HOST_IDENTIFIER            = 0x81,
+     NVME_RESERVATION_NOTICE_MASK    = 0x82,
++    NVME_NS_WRITE_PROTECTION        = 0x84,
+     NVME_FID_MAX                    = 0x100,
+ };
+ 
+@@ -1491,7 +1493,9 @@ typedef struct QEMU_PACKED NvmeIdNs {
+     uint16_t    mssrl;
+     uint32_t    mcl;
+     uint8_t     msrc;
+-    uint8_t     rsvd81[23];
++    uint8_t     rsvd81[18];
++    uint8_t     nsattr;
++    uint8_t     rsvd100[4];
+     uint8_t     nguid[16];
+     uint64_t    eui64;
+     NvmeLBAF    lbaf[16];
+@@ -1657,6 +1661,18 @@ typedef enum NvmeZoneState {
+     NVME_ZONE_STATE_OFFLINE          = 0x0f,
+ } NvmeZoneState;
+ 
++enum NvmeNsWriteProtect {
++    NVME_NS_WR_PROTECT                      = 0x01,
++    NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE       = 0x02,
++    NVME_NS_PERM_WR_PROTECT                 = 0x03,
++};
++
++enum NvmeNsWriteProtectMask {
++    NVME_NS_WR_PROTECT_MASK                    = 1 << 0,
++    NVME_NS_WR_PROTECT_UNTIL_PW_CYCLE_MASK     = 1 << 1,
++    NVME_NS_PERM_WR_PROTECT_MASK               = 1 << 2,
++};
++
+ static inline void _nvme_check_size(void)
+ {
+     QEMU_BUILD_BUG_ON(sizeof(NvmeBar) != 4096);
+Index: src/include/monitor/hmp.h
+===================================================================
+--- src.orig/include/monitor/hmp.h
++++ src/include/monitor/hmp.h
+@@ -131,5 +131,6 @@ void hmp_replay_delete_break(Monitor *mo
+ void hmp_replay_seek(Monitor *mon, const QDict *qdict);
+ void hmp_info_dirty_rate(Monitor *mon, const QDict *qdict);
+ void hmp_calc_dirty_rate(Monitor *mon, const QDict *qdict);
++void hmp_nvme_issue_power_cycle(Monitor *mon, const QDict *qdict);
+ 
+ #endif
