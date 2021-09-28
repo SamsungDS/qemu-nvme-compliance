@@ -1,0 +1,154 @@
+hw/nvme: add oacs device parameter
+
+Add the 'oacs' nvme device parameter to allow optional features to be
+enabled/disabled explicitly. Since most of these are optional commands, make
+the CSE log pages dynamic to account for the value of OACS once the optional
+commands supported added to device.
+
+Signed-off-by: Gollu Appalanaidu <anaidu.gollu@samsung.com>
+Index: src/hw/nvme/ctrl.c
+===================================================================
+--- src.orig/hw/nvme/ctrl.c
++++ src/hw/nvme/ctrl.c
+@@ -117,6 +117,11 @@
+  *   by the controller. To add support for the optional feature, needs to
+  *   set the corresponding support indicated bit.
+  *
++ * - `oacs`
++ *   This field indicates the optional Admin commands and features supported
++ *   by the controller. To add support for the optional feature, needs to
++ *   set the corresponding support indicated bit.
++ *
+  * nvme namespace device parameters
+  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  * - `shared`
+@@ -226,24 +231,6 @@ static const uint32_t nvme_feature_cap[N
+     [NVME_RESERVATION_NOTICE_MASK]  = NVME_FEAT_CAP_CHANGE | NVME_FEAT_CAP_NS,
+ };
+ 
+-static const uint32_t nvme_cse_acs[NVME_MAX_COMMANDS] = {
+-    [NVME_ADM_CMD_DELETE_SQ]        = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_CREATE_SQ]        = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_GET_LOG_PAGE]     = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_DELETE_CQ]        = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_CREATE_CQ]        = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_IDENTIFY]         = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_ABORT]            = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_SET_FEATURES]     = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_GET_FEATURES]     = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_ASYNC_EV_REQ]     = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_NS_ATTACHMENT]    = NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_NIC,
+-    [NVME_ADM_CMD_FORMAT_NVM]       = NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_LBCC,
+-    [NVME_ADM_CMD_DST]              = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_DOWNLOAD_FW]      = NVME_CMD_EFF_CSUPP,
+-    [NVME_ADM_CMD_COMMIT_FW]        = NVME_CMD_EFF_CSUPP,
+-};
+-
+ static const uint32_t nvme_cse_iocs_none[NVME_MAX_COMMANDS];
+ 
+ static void nvme_process_sq(void *opaque);
+@@ -4784,7 +4771,7 @@ static uint16_t nvme_cmd_effects(NvmeCtr
+         }
+     }
+ 
+-    memcpy(log.acs, nvme_cse_acs, sizeof(nvme_cse_acs));
++    memcpy(log.acs, n->acs, sizeof(n->acs));
+ 
+     if (src_iocs) {
+         memcpy(log.iocs, src_iocs, sizeof(log.iocs));
+@@ -6373,7 +6360,7 @@ static uint16_t nvme_admin_cmd(NvmeCtrl
+     trace_pci_nvme_admin_cmd(nvme_cid(req), nvme_sqid(req), req->cmd.opcode,
+                              nvme_adm_opc_str(req->cmd.opcode));
+ 
+-    if (!(nvme_cse_acs[req->cmd.opcode] & NVME_CMD_EFF_CSUPP)) {
++    if (!(n->acs[req->cmd.opcode] & NVME_CMD_EFF_CSUPP)) {
+         trace_pci_nvme_err_invalid_admin_opc(req->cmd.opcode);
+         return NVME_INVALID_OPCODE | NVME_DNR;
+     }
+@@ -7275,6 +7262,39 @@ static void nvme_init_cse_iocs(NvmeCtrl
+     n->iocs.zoned[NVME_CMD_ZONE_MGMT_RECV] = NVME_CMD_EFF_CSUPP;
+ }
+ 
++static void nvme_init_cse_acs(NvmeCtrl *n)
++{
++    n->acs[NVME_ADM_CMD_DELETE_SQ] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_CREATE_SQ] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_GET_LOG_PAGE] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_DELETE_CQ] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_CREATE_CQ] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_IDENTIFY] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_ABORT] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_SET_FEATURES] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_GET_FEATURES] = NVME_CMD_EFF_CSUPP;
++    n->acs[NVME_ADM_CMD_ASYNC_EV_REQ] = NVME_CMD_EFF_CSUPP;
++
++    if (n->params.oacs & NVME_OACS_NS_MGMT) {
++        n->acs[NVME_ADM_CMD_NS_ATTACHMENT] =
++            NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_NIC;
++    }
++
++    if (n->params.oacs & NVME_OACS_FORMAT) {
++        n->acs[NVME_ADM_CMD_FORMAT_NVM] =
++            NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_LBCC;
++    }
++
++    if (n->params.oacs & NVME_OACS_DST) {
++        n->acs[NVME_ADM_CMD_DST] = NVME_CMD_EFF_CSUPP;
++    }
++
++    if (n->blk_bp) {
++        n->acs[NVME_ADM_CMD_DOWNLOAD_FW] = NVME_CMD_EFF_CSUPP;
++        n->acs[NVME_ADM_CMD_COMMIT_FW] = NVME_CMD_EFF_CSUPP;
++    }
++}
++
+ static void nvme_init_state(NvmeCtrl *n)
+ {
+     /* add one to max_ioqpairs to account for the admin queue pair */
+@@ -7287,6 +7307,7 @@ static void nvme_init_state(NvmeCtrl *n)
+     n->starttime_ms = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL);
+     n->aer_reqs = g_new0(NvmeRequest *, n->params.aerl + 1);
+ 
++    nvme_init_cse_acs(n);
+     nvme_init_cse_iocs(n);
+ 
+     QTAILQ_INIT(&n->dst.dst_list);
+@@ -7449,7 +7470,7 @@ static void nvme_init_ctrl(NvmeCtrl *n,
+ 
+     id->mdts = n->params.mdts;
+     id->ver = cpu_to_le32(NVME_SPEC_VER);
+-    id->oacs = cpu_to_le16(NVME_OACS_NS_MGMT | NVME_OACS_FORMAT | NVME_OACS_DST);
++    id->oacs = cpu_to_le16(n->params.oacs);
+     if (n->blk_bp) {
+         id->oacs |= NVME_OACS_FW;
+     }
+@@ -7729,6 +7750,8 @@ static Property nvme_props[] = {
+                        NVME_ONCS_COMPARE | NVME_ONCS_FEATURES |
+                        NVME_ONCS_COPY | NVME_ONCS_VERIFY |
+                        NVME_ONCS_WRITE_UNCORR),
++    DEFINE_PROP_UINT16("oacs", NvmeCtrl, params.oacs, NVME_OACS_NS_MGMT |
++                       NVME_OACS_FORMAT | NVME_OACS_DST),
+     DEFINE_PROP_BOOL("use-intel-id", NvmeCtrl, params.use_intel_id, false),
+     DEFINE_PROP_BOOL("legacy-cmb", NvmeCtrl, params.legacy_cmb, false),
+     DEFINE_PROP_UINT8("zoned.zasl", NvmeCtrl, params.zasl, 0),
+Index: src/hw/nvme/nvme.h
+===================================================================
+--- src.orig/hw/nvme/nvme.h
++++ src/hw/nvme/nvme.h
+@@ -414,6 +414,7 @@ typedef struct NvmeParams {
+     bool     auto_transition_zones;
+     bool     legacy_cmb;
+     uint16_t oncs;
++    uint16_t oacs;
+ } NvmeParams;
+ 
+ typedef struct NvmeDst {
+@@ -506,6 +507,8 @@ typedef struct NvmeCtrl {
+ 
+     NvmeDst dst;
+ 
++    uint32_t acs[NVME_MAX_COMMANDS];
++
+     struct {
+         uint32_t nvm[NVME_MAX_COMMANDS];
+         uint32_t zoned[NVME_MAX_COMMANDS];
