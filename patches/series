@@ -6,3 +6,4 @@ write-uncorrectable/add-write-uncorrectable-command.patch
 reservations.patch
 wp.patch
 oacs.patch
+admin-controller.patch
