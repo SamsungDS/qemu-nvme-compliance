@@ -1,0 +1,38 @@
+nvme-mi-identify(1)
+==================
+
+NAME
+----
+nvme-mi-identify - Identify command
+
+SYNOPSIS
+--------
+[verse]
+'identify' [--cns=<NUM>, -c <NUM>]
+		   [--cntid=<NUM>, -C <NUM>]
+
+DESCRIPTION
+-----------
+The command requests information about the NVM 
+Subsystem, controller or namespace.
+
+OPTIONS
+-c <NUM>::
+--cns=<NUM>::
+	Controller or Namespace structure.
+
+-C <NUM>::
+--cntid=<NUM>::
+	Controller Identifier.
+
+
+EXAMPLES
+--------
+* Send a Identify command to get Identify 
+Namesapce Data Structe for the specified 
+NSID:
++
+----------------------
+# identify -c 0 -C 0
+----------------------
+

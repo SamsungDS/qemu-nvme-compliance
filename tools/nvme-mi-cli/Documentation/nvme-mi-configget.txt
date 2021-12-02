@@ -1,0 +1,46 @@
+nvme-mi-configget(1)
+=======================
+
+NAME
+----
+nvme-mi-configget - NVMe MI Configuration GET
+
+SYNOPSIS
+--------
+[verse]
+'configget' [--configid=<NUM>, -c <NUM>]
+				   [--portid=<NUM>, -p <NUM>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the Configuration GET command with the
+requested action. The command allows the requester to read the current 
+configuration of a responder.
+
+OPTIONS
+-c <NUM>::
+--configid=<NUM>::
+	Configuration Identifier.
+
+-p <NUM>::
+--portid=<NUM>::
+	Port Identifier.
+
+EXAMPLES
+--------
+* Send a Configuration GET command to get
+current frequency of the SMBus port specified:
++
+-------------------------------------
+# readnvmemids -c 1 -p 0
+-------------------------------------
++
+
+* Send a Configuration GET command to get
+current MCTP Transmission unit of the 
+port specified:
++
+-------------------------------------
+# nvme mi readnvmemids -c 3 -p 0
+-------------------------------------
+

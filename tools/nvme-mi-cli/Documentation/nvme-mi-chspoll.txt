@@ -1,0 +1,36 @@
+nvme-mi-chspoll(1)
+==================
+
+NAME
+----
+nvme-mi-chspoll - NVMe MI Controller Health Status Poll Command
+
+SYNOPSIS
+--------
+[verse]
+'nvme mi chspoll' [--cdw0=<NUM>, -c <NUM>]
+				   [--cdw1=<NUM>, -d <NUM>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the Controller Health Status Poll command with the
+requested dwords. The command requests health status data for the controller requested.
+
+OPTIONS
+-c <NUM>::
+--cdw0=<NUM>::
+	DWord 0 for Controller Health Status Poll.
+
+-d <NUM>::
+--cdw1=<NUM>::
+	DWord 1 for Controller Health Status Poll.
+
+
+EXAMPLES
+--------
+* Send a Controller Health Status Poll command to get
+health attributes for the controller:
++
+---------------------------
+# nvme mi chspoll -c 0 -d 0
+---------------------------

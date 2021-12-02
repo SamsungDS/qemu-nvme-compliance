@@ -1,0 +1,51 @@
+nvme-mi-readnvmemids(1)
+=======================
+
+NAME
+----
+nvme-mi-readnvmemids - Read NVMe MI Data Structure command
+
+SYNOPSIS
+--------
+[verse]
+'nvme mi readnvmemids' [--ctrlid=<NUM>, -c <NUM>]
+				   [--portid=<NUM>, -p <NUM>]
+				   [--dtyp=<NUM>, -d <NUM>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the ReadNVMe MI Data Structure command with the
+requested action. The command requests data related to NVM Subsystem, the Management
+Endpoint or the NVM Controllers.
+
+OPTIONS
+-c <NUM>::
+--ctrlid=<NUM>::
+	Controller Identifier.
+
+-p <NUM>::
+--portid=<NUM>::
+	Port Identifier.
+
+-d <NUM>::
+--dtyp=<NUM>::
+	Data Structure Type.
+
+
+EXAMPLES
+--------
+* Send a Read NVMe MI Data Structure command to get
+NVM Subsystem Information:
++
+-------------------------------------
+# nvme mi readnvmemids -c 0 -p 0 -d 0
+-------------------------------------
++
+
+* Send a Read NVMe MI Data Structure command to get
+NVM Subsystem Information:
++
+-------------------------------------
+# nvme mi readnvmemids -c 0 -p 0 -d 4
+-------------------------------------
+

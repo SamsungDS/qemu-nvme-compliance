@@ -1,0 +1,56 @@
+nvme-mi-getlog(1)
+==================
+
+NAME
+----
+nvme-mi-getlog - GET Log Page command
+
+SYNOPSIS
+--------
+[verse]
+'getlog' [--log_id=<NUM>, -i <NUM>]
+         [--log_len=<NUM>, -l <NUM>]
+         [--lpo=<NUM>, -o <NUM>]
+         [--lsp=<NUM>, -s <NUM>]
+         [--rae=<NUM>, -r <NUM>]
+         [--uuid_index=<NUM>, -U <NUM>]
+
+DESCRIPTION
+-----------
+The command returns the data buffer 
+containing the log page requested.
+
+OPTIONS
+-i <NUM>::
+--log_id=<NUM>::
+	Log Identifier.
+
+-l <NUM>::
+--log_len=<NUM>::
+	Log Length.
+
+-o <NUM>::
+--lpo=<NUM>::
+	Log Page Offset.
+
+-s <NUM>::
+--lsp=<NUM>::
+	Log Specific Field.
+
+-r <NUM>::
+--rae=<NUM>::
+	Retain Asynchronous Event.
+
+-U <NUM>::
+--uuid_index=<NUM>::
+    UUID Index.
+
+EXAMPLES
+--------
+* Send a GET Log command to get
+log page of specified page:
++
+----------------------
+# getlog -i 255 -l 0 -o 0 -s 0 -r 0 -U 0
+----------------------
+

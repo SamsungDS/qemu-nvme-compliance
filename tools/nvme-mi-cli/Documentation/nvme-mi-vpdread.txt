@@ -1,0 +1,40 @@
+nvme-mi-vpdread(1)
+==================
+
+NAME
+----
+nvme-mi-vpdread - NVMe MI VPD Read
+
+SYNOPSIS
+--------
+[verse]
+'vpdread' [--dofst=<NUM>, -o <NUM>]
+		  [--dlen=<NUM>,  -l <NUM>]
+		  [--data=<FILE>, -d <FILE>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the VPD Read command with the
+requested action.The command is used to get vital product data.
+
+OPTIONS
+-o <NUM>::
+--dofst=<NUM>::
+	Data offset.
+
+-l <NUM>::
+--dlen=<NUM>::
+	Data length.
+
+-d <FILE>::
+--data=<FILE>::
+	Data filename.
+
+EXAMPLES
+--------
+* Send a VPD Read command to get 
+vital product data.
++
+----------------------
+# vpdread -o 0 -l 100 -d "filepath" 
+----------------------

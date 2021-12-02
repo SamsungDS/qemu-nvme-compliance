@@ -1,0 +1,53 @@
+nvme-mi-getfeature(1)
+==================
+
+NAME
+----
+nvme-mi-getfeature - GET Features Command
+
+SYNOPSIS
+--------
+[verse]
+'getfeature' [--namespace_id=<NUM>, -n <NUM>]
+			 [--feature_id=<NUM>, -f <NUM>]
+			 [--sel=<NUM>, -s <NUM>]
+			 [--data_len=<NUM>, -l <NUM>]
+			 [--cdw11=<NUM>, -c <NUM>]
+
+DESCRIPTION
+-----------
+The GET Features Command retrievs the attributes
+of the Feature specified.
+
+OPTIONS
+-n <NUM>::
+--namespace_id=<NUM>::
+	Namesapce Identifier.
+
+-f <NUM>::
+--feature_id=<NUM>::
+	Feature Identifier.
+
+-s <NUM>::
+--sel=<NUM>::
+	Select.
+
+-l <NUM>::
+--data_len=<NUM>::
+	Data Length.
+
+-c <NUM>::
+--cdw11=<NUM>::
+	Command Dword.
+
+
+EXAMPLES
+--------
+* Send a GET Feature command to get
+attributes of feature specified:
++
+----------------------
+# getfeature -n 0 -f 0 -s 0 -l 0 -c 0
+----------------------
++
+
