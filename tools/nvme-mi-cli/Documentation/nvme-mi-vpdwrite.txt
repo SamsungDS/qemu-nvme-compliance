@@ -1,0 +1,40 @@
+nvme-mi-vpdwrite(1)
+==================
+
+NAME
+----
+nvme-mi-vpdwrite - NVMe MI VPD Write
+
+SYNOPSIS
+--------
+[verse]
+'vpdwrite' [--dofst=<NUM>, -o <NUM>]
+		  [--dlen=<NUM>,  -l <NUM>]
+		  [--data=<FILE>, -d <FILE>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the VPD Write command with the
+requested action. The command is used to update vital product data.
+
+OPTIONS
+-o <NUM>::
+--dofst=<NUM>::
+	Data offset.
+
+-l <NUM>::
+--dlen=<NUM>::
+	Data length.
+
+-d <FILE>::
+--data=<FILE>::
+	Data filename.
+
+EXAMPLES
+--------
+* Send a VPD Read command to update
+vital product data.
++
+----------------------
+# vpdread -o 0 -l 0 -d "filepath" 
+----------------------

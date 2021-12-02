@@ -1,0 +1,43 @@
+nvme-mi-shspoll(1)
+==================
+
+NAME
+----
+nvme-mi-shspoll - NVMe MI Subsystem Health Status Poll Command
+
+SYNOPSIS
+--------
+[verse]
+'nvme mi shspoll' [--ctrlid=<NUM>, -c <NUM>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the Subsystem Health Status Poll command.
+The command requests Health status such as composite temprature, Smart warnings
+and Percentage life used etc for the NVM Subsystem.
+
+OPTIONS
+-c <NUM>::
+--cs=<NUM>::
+	Clear Status.
+
+EXAMPLES
+--------
+* Send a NVM Subsystem Health Status Poll command to get
+health attributes for the NVM Subsystem:
++
+----------------------
+# nvme mi shspoll -c 0
+----------------------
++
+
+* Send a NVM Subsystem Health Status Poll command to get
+health attributes for the NVM Subsystem:
++
+----------------------
+# nvme mi shspoll -c 1
+----------------------
+
+NVME
+----
+Part of nvme-cli

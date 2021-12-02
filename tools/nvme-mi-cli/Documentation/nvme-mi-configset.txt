@@ -1,0 +1,56 @@
+nvme-mi-configset(1)
+=======================
+
+NAME
+----
+nvme-mi-configset - NVMe MI Configuration Set
+
+SYNOPSIS
+--------
+[verse]
+'configset' [--configid=<NUM>, -c <NUM>]
+			[--portid=<NUM>, -p <NUM>]
+            [--smbusfreq=<NUM>, -f <NUM>]
+            [--mctpunitsz=<NUM>, -s <NUM>]
+
+DESCRIPTION
+-----------
+For the NVMe-MI device given, issues the Configuration Set command with the
+requested action. The command allows the requester to modify the current 
+configuration of a responder.
+
+OPTIONS
+-c <NUM>::
+--configid=<NUM>::
+	Configuration Identifier.
+
+-p <NUM>::
+--portid=<NUM>::
+	Port Identifier.
+
+-f <NUM>::
+--smbusfreq=<NUM>::
+    SMBus frequency.
+
+-s <NUM>::
+--mctpunitsz=<NUM>::
+	MCTP Transmission Unit Size.
+
+EXAMPLES
+--------
+* Send a Configuration Set command to set
+new frequency for the SMBus port specified:
++
+-------------------------------------
+# configset -c 1 -p 0 -f 100 -s 0
+-------------------------------------
++
+
+* Send a Configuration Set command to set
+ the new MCTP Transmission unit of the 
+port specified:
++
+-------------------------------------
+# nvme mi readnvmemids -c 3 -p 0 -f 0 -s 68
+-------------------------------------
+
