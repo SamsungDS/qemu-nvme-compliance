@@ -901,6 +901,8 @@ enum NvmeStatusCodes {
     NVME_INVALID_PRP_OFFSET     = 0x0013,
     NVME_CMD_SET_CMB_REJECTED   = 0x002b,
     NVME_INVALID_CMD_SET        = 0x002c,
+    NVME_INVALID_KEY_TAG        = 0x0025,
+    NVME_INCORRECT_KEY          = 0x0028,
     NVME_FDP_DISABLED           = 0x0029,
     NVME_INVALID_PHID_LIST      = 0x002a,
     NVME_LBA_RANGE              = 0x0080,
@@ -1068,6 +1070,7 @@ enum NvmeIdCns {
     NVME_ID_CNS_CS_NS                 = 0x05,
     NVME_ID_CNS_CS_CTRL               = 0x06,
     NVME_ID_CNS_CS_NS_ACTIVE_LIST     = 0x07,
+    NVME_ID_CNS_CS_IND_NS             = 0x08,
     NVME_ID_CNS_NS_PRESENT_LIST       = 0x10,
     NVME_ID_CNS_NS_PRESENT            = 0x11,
     NVME_ID_CNS_NS_ATTACHED_CTRL_LIST = 0x12,
@@ -1127,7 +1130,9 @@ typedef struct QEMU_PACKED NvmeIdCtrl {
     uint8_t     rsvd332[6];
     uint16_t    nsetidmax;
     uint16_t    endgidmax;
-    uint8_t     rsvd342[170];
+    uint8_t     rsvd342[16];
+    uint8_t     kpioc;
+    uint8_t     rsvd359[153];
     uint8_t     sqes;
     uint8_t     cqes;
     uint16_t    maxcmd;
@@ -1399,6 +1404,22 @@ typedef struct QEMU_PACKED NvmeIdNsNvm {
     uint32_t    elbaf[NVME_MAX_NLBAF];
     uint8_t     rsvd268[3828];
 } NvmeIdNsNvm;
+
+typedef struct QEMU_PACKED NvmeIdNsIndependent {
+    uint8_t     nsfeat;
+    uint8_t     nmic;
+    uint8_t     rescap;
+    uint8_t     fpi;
+    uint32_t    anagrpid;
+    uint8_t     nsattr;
+    uint8_t     rsvd9;
+    uint16_t    nvmsetid;
+    uint16_t    endgrpid;
+    uint8_t     nstat;
+    uint8_t     kpios;
+    uint16_t    maxkt;
+    uint8_t     rsvd18[4078];
+} NvmeIdNsIndependent;
 
 typedef struct QEMU_PACKED NvmeIdNsDescr {
     uint8_t nidt;
@@ -1854,6 +1875,7 @@ static inline void _nvme_check_size(void)
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAF) != 4);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAFE) != 16);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNs) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsIndependent) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsNvm) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsZoned) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeSglDescriptor) != 16);

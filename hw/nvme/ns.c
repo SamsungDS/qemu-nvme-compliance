@@ -119,6 +119,8 @@ static int nvme_ns_init(NvmeNamespace *ns, Error **errp)
     };
 
     ns->nlbaf = 8;
+    ns->kpios = 3;
+    ns->maxkt = 10;
 
     memcpy(&id_ns->lbaf, &lbaf, sizeof(lbaf));
 
