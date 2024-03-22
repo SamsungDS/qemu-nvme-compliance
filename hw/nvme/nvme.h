@@ -215,6 +215,12 @@ typedef struct NvmeNamespaceParams {
     uint64_t zrwas;
     uint64_t zrwafg;
 
+    bool     slm;
+    uint64_t slm_size;
+    uint32_t slm_mssrl;
+    uint64_t slm_mcl;
+    uint8_t  slm_msrc;
+
     struct {
         char *ruhs;
     } fdp;
@@ -228,9 +234,13 @@ typedef struct NvmeNamespace {
     int64_t      moff;
     NvmeIdNs     id_ns;
     NvmeIdNsNvm  id_ns_nvm;
+    NvmeIdNsSLM  *id_ns_slm;
     NvmeLBAF     lbaf;
+    NvmeSLMF     slmf;
     unsigned int nlbaf;
+    unsigned int nslmf;
     size_t       lbasz;
+    size_t       slmds;
     const uint32_t *iocs;
     uint8_t      csi;
     uint16_t     status;
@@ -258,6 +268,8 @@ typedef struct NvmeNamespace {
     uint8_t         *zd_extensions;
     int32_t         nr_open_zones;
     int32_t         nr_active_zones;
+
+    uint8_t         *slm_buf;
 
     NvmeNamespaceParams params;
     NvmeSubsystem *subsys;

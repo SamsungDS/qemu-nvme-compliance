@@ -639,6 +639,10 @@ enum NvmeIoCommands {
     NVME_CMD_ZONE_MGMT_SEND     = 0x79,
     NVME_CMD_ZONE_MGMT_RECV     = 0x7a,
     NVME_CMD_ZONE_APPEND        = 0x7d,
+    NVME_CMD_SLM_WRITE          = 0x01,
+    NVME_CMD_SLM_READ           = 0x02,
+    NVME_CMD_SLM_FILL           = 0x04,
+    NVME_CMD_SLM_COPY           = 0x05,
 };
 
 typedef struct QEMU_PACKED NvmeDeleteQ {
@@ -1068,6 +1072,7 @@ enum NvmeIdCns {
     NVME_ID_CNS_CS_NS                 = 0x05,
     NVME_ID_CNS_CS_CTRL               = 0x06,
     NVME_ID_CNS_CS_NS_ACTIVE_LIST     = 0x07,
+    NVME_ID_CNS_CS_IND_NS             = 0x08,
     NVME_ID_CNS_NS_PRESENT_LIST       = 0x10,
     NVME_ID_CNS_NS_PRESENT            = 0x11,
     NVME_ID_CNS_NS_ATTACHED_CTRL_LIST = 0x12,
@@ -1154,6 +1159,12 @@ typedef struct NvmeIdCtrlZoned {
     uint8_t     zasl;
     uint8_t     rsvd1[4095];
 } NvmeIdCtrlZoned;
+
+typedef struct NvmeIdCtrlSLM {
+    uint32_t    ver;
+    uint8_t     nms;
+    uint8_t     rsvd5[4091];
+} NvmeIdCtrlSLM;
 
 typedef struct NvmeIdCtrlNvm {
     uint8_t     vsl;
@@ -1347,6 +1358,12 @@ typedef struct QEMU_PACKED NvmeLBAFE {
     uint8_t     rsvd9[7];
 } NvmeLBAFE;
 
+typedef struct QEMU_PACKED NvmeSLMF {
+    uint32_t    ds:8;
+    uint32_t    rsvd:23;
+    uint32_t    val:1;
+} NvmeSLMF;
+
 #define NVME_NSID_BROADCAST 0xffffffff
 #define NVME_MAX_NLBAF 64
 
@@ -1400,6 +1417,21 @@ typedef struct QEMU_PACKED NvmeIdNsNvm {
     uint8_t     rsvd268[3828];
 } NvmeIdNsNvm;
 
+typedef struct QEMU_PACKED NvmeIdNsIndependent {
+    uint8_t     nsfeat;
+    uint8_t     nmic;
+    uint8_t     rescap;
+    uint8_t     fpi;
+    uint32_t    anagrpid;
+    uint8_t     nsattr;
+    uint8_t     rsvd9;
+    uint16_t    nvmsetid;
+    uint16_t    endgrpid;
+    uint8_t     nstat;
+    uint32_t    rgrpid;
+    uint8_t     rsvd15[4077];
+} NvmeIdNsIndependent;
+
 typedef struct QEMU_PACKED NvmeIdNsDescr {
     uint8_t nidt;
     uint8_t nidl;
@@ -1427,6 +1459,7 @@ enum NvmeIdNsNmic {
 enum NvmeCsi {
     NVME_CSI_NVM                = 0x00,
     NVME_CSI_ZONED              = 0x02,
+    NVME_CSI_SLM                = 0x03,
 };
 
 #define NVME_SET_CSI(vec, csi) (vec |= (uint8_t)(1 << (csi)))
@@ -1457,6 +1490,17 @@ enum NvmeIdNsZonedOzcs {
 enum NvmeIdNsZonedZrwacap {
     NVME_ID_NS_ZONED_ZRWACAP_EXPFLUSHSUP = 1 << 0,
 };
+
+typedef struct QEMU_PACKED NvmeIdNsSLM {
+    uint64_t    nsze;
+    uint8_t     nf;
+    uint32_t    nowg;
+    uint64_t    mcl;
+    uint32_t    mssrl;
+    uint8_t     msrc;
+    uint32_t    slmf[32];
+    uint8_t     rsvd105[3942];
+} NvmeIdNsSLM;
 
 /*Deallocate Logical Block Features*/
 #define NVME_ID_NS_DLFEAT_GUARD_CRC(dlfeat)       ((dlfeat) & 0x10)
@@ -1850,12 +1894,16 @@ static inline void _nvme_check_size(void)
     QEMU_BUILD_BUG_ON(sizeof(NvmeEffectsLog) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrl) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlZoned) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsSLM) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlNvm) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAF) != 4);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAFE) != 16);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNs) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsIndependent) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsNvm) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsZoned) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsSLM) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeSLMF) != 4);
     QEMU_BUILD_BUG_ON(sizeof(NvmeSglDescriptor) != 16);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsDescr) != 4);
     QEMU_BUILD_BUG_ON(sizeof(NvmeZoneDescr) != 64);
