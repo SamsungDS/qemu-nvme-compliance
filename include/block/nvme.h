@@ -803,6 +803,9 @@ typedef struct QEMU_PACKED NvmeDsmRange {
 enum {
     NVME_COPY_FORMAT_0 = 0x0,
     NVME_COPY_FORMAT_1 = 0x1,
+    NVME_COPY_FORMAT_2 = 0x2,
+    NVME_COPY_FORMAT_3 = 0x3,
+    NVME_COPY_FORMAT_4 = 0x4,
 };
 
 typedef struct QEMU_PACKED NvmeCopyCmd {
@@ -824,6 +827,32 @@ typedef struct QEMU_PACKED NvmeCopyCmd {
     uint16_t    appmask;
 } NvmeCopyCmd;
 
+#define SLM_MSSRL_LENGTH (256 * 1024 * 1024)
+#define DWORD_ALIGN_MASK (3)
+
+typedef struct QEMU_PACKED NvmeSLMCopyCmd {
+    uint8_t     opcode;
+    uint8_t     flags;
+    uint16_t    cid;
+    uint32_t    nsid;
+    uint32_t    cdw2;
+    uint32_t    cdw3;
+    uint32_t    rsvd2[2];
+    NvmeCmdDptr dptr;
+    uint64_t    starting_address;
+    uint8_t     nr;
+    uint8_t     desc_format:4;
+    uint8_t     rsvd12:4;
+    uint8_t     direc_type:4;
+    uint8_t     rsvd12a:4;
+    uint8_t     rsvd12b:2;
+    uint8_t     fua:1;
+    uint8_t     lr:1;
+    uint16_t    rsvd13;
+    uint16_t    dspec;
+    uint32_t    rsvd14[2];
+} NvmeSLMCopyCmd;
+
 typedef struct QEMU_PACKED NvmeCopySourceRangeFormat0 {
     uint8_t  rsvd0[8];
     uint64_t slba;
@@ -843,6 +872,36 @@ typedef struct QEMU_PACKED NvmeCopySourceRangeFormat1 {
     uint16_t apptag;
     uint16_t appmask;
 } NvmeCopySourceRangeFormat1;
+
+typedef struct QEMU_PACKED NvmeCopySourceRangeFormat4 {
+    uint32_t snsid;
+    uint32_t  rsvd1;
+    uint64_t saddr;
+    uint32_t nbyte;
+    uint32_t fco:1;
+    uint32_t rsvd:31;
+    uint64_t  rsvd7;
+} NvmeCopySourceRangeFormat4;
+
+typedef struct QEMU_PACKED NvmeCopySourceRangeFormat2 {
+    uint32_t snsid;
+    uint8_t  rsvd1[4];
+    uint64_t slba;
+    uint16_t nlb;
+    uint16_t rsvd2:15;
+    uint16_t fco:1;
+    uint8_t  rsvd7[12];
+} NvmeCopySourceRangeFormat2;
+
+typedef struct QEMU_PACKED NvmeCopySourceRangeFormat3 {
+    uint32_t snsid;
+    uint8_t  rsvd1[4];
+    uint64_t slba;
+    uint16_t nlb;
+    uint16_t rsvd2:15;
+    uint16_t fco:1;
+    uint8_t  rsvd7[20];
+} NvmeCopySourceRangeFormat3;
 
 enum NvmeAsyncEventRequest {
     NVME_AER_TYPE_ERROR                     = 0,
@@ -1210,6 +1269,9 @@ enum NvmeIdCtrlOncs {
 enum NvmeIdCtrlOcfs {
     NVME_OCFS_COPY_FORMAT_0 = 1 << NVME_COPY_FORMAT_0,
     NVME_OCFS_COPY_FORMAT_1 = 1 << NVME_COPY_FORMAT_1,
+    NVME_OCFS_COPY_FORMAT_2 = 1 << NVME_COPY_FORMAT_2,
+    NVME_OCFS_COPY_FORMAT_3 = 1 << NVME_COPY_FORMAT_3,
+    NVME_OCFS_COPY_FORMAT_4 = 1 << NVME_COPY_FORMAT_4,
 };
 
 enum NvmeIdctrlVwc {
