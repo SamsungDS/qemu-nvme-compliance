@@ -29,6 +29,7 @@
 #define NVME_EUI64_DEFAULT ((uint64_t)0x5254000000000000)
 #define NVME_FDP_MAX_EVENTS 63
 #define NVME_FDP_MAXPIDS 128
+#define NVME_MAX_REACHABILITY_GROUP 256
 
 /*
  * The controller only supports Submission and Completion Queue Entry Sizes of
@@ -150,6 +151,8 @@ static inline NvmeNamespace *nvme_subsys_ns(NvmeSubsystem *subsys,
 #define NVME_NS(obj) \
     OBJECT_CHECK(NvmeNamespace, (obj), TYPE_NVME_NS)
 
+#define MAX_RA 6
+
 typedef struct NvmeZone {
     NvmeZoneDescr   d;
     uint64_t        w_ptr;
@@ -221,6 +224,9 @@ typedef struct NvmeNamespaceParams {
     uint64_t slm_mcl;
     uint8_t  slm_msrc;
 
+    uint32_t rgid;
+    uint32_t rasid[MAX_RA];
+
     struct {
         char *ruhs;
     } fdp;
@@ -271,6 +277,9 @@ typedef struct NvmeNamespace {
 
     uint8_t         *slm_buf;
 
+    uint32_t        rgid;
+    uint32_t        rasid;
+
     NvmeNamespaceParams params;
     NvmeSubsystem *subsys;
     NvmeEnduranceGroup *endgrp;
@@ -285,6 +294,27 @@ typedef struct NvmeNamespace {
         uint16_t *phs;
     } fdp;
 } NvmeNamespace;
+
+typedef struct rg_ns {
+    uint32_t nsid;
+    QTAILQ_ENTRY(rg_ns) entry;
+} rg_ns;
+
+typedef struct NvmeReachabilityGroup {
+    uint8_t ns_type;
+    uint32_t num_nsids;
+    QTAILQ_HEAD(, rg_ns) rg_ns_list;
+} NvmeReachabilityGroup;
+
+typedef struct NvmeReachabilityAssociation {
+    uint32_t num_rgid;
+    QTAILQ_HEAD(, ra_rg) ra_rg_list;
+} NvmeReachabilityAssociation;
+
+typedef struct ra_rg {
+    uint32_t rgid;
+    QTAILQ_ENTRY(ra_rg) entry;
+} ra_rg;
 
 static inline uint32_t nvme_nsid(NvmeNamespace *ns)
 {
@@ -634,6 +664,10 @@ typedef struct NvmeCtrl {
         uint16_t    vqrfap;
         uint16_t    virfap;
     } next_pri_ctrl_cap;    /* These override pri_ctrl_cap after reset */
+
+    NvmeReachabilityGroup *rg[NVME_MAX_NAMESPACES + 1];
+    NvmeReachabilityAssociation *ra[NVME_MAX_REACHABILITY_GROUP + 1];
+
 } NvmeCtrl;
 
 typedef enum NvmeResetType {
