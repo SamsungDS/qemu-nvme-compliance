@@ -645,6 +645,7 @@ enum NvmeIoCommands {
     NVME_CMD_SLM_READ           = 0x02,
     NVME_CMD_SLM_FILL           = 0x04,
     NVME_CMD_SLM_COPY           = 0x05,
+    NVME_CMD_EXECUTE_PROGRAM    = 0x01,
 };
 
 typedef struct QEMU_PACKED NvmeDeleteQ {
@@ -762,6 +763,23 @@ typedef struct QEMU_PACKED LoadProgramCmd {
     uint32_t    numb;
     uint32_t    loff;
 } LoadProgramCmd;
+
+typedef struct QEMU_PACKED ExecProgram {
+    uint8_t     opcode;
+    uint8_t     flags;
+    uint16_t    cid;
+    uint32_t    nsid;
+    uint16_t    pind;
+    uint16_t    rsid;
+    uint32_t    numr;
+    uint32_t    dlen;
+    uint32_t    cdw5;
+    NvmeCmdDptr dptr;
+    uint64_t    cparam1;
+    uint64_t    cparam2;
+    uint32_t    cdw14;
+    uint32_t    cdw15;
+} ExecProgram;
 enum {
     NVME_RW_LR                  = 1 << 15,
     NVME_RW_FUA                 = 1 << 14,
@@ -1174,6 +1192,19 @@ typedef struct ProgramListLog {
     uint32_t numd;
     uint8_t rsvd[60];
 } ProgramListLog;
+
+typedef struct DownloadableTypeDescrDS {
+    uint8_t ptype;
+    uint8_t ver;
+    uint8_t rsvd[6];
+    uint8_t specific_prgm_type[24];
+} DownloadableTypeDescrDS;
+
+typedef struct DownloadableTypeList {
+    uint32_t numd;
+    uint8_t rsvd[28];
+} DownloadableTypeList;
+
 enum {
     NVME_CMD_EFF_CSUPP      = 1 << 0,
     NVME_CMD_EFF_LBCC       = 1 << 1,
@@ -1191,6 +1222,7 @@ enum NvmeLogIdentifier {
     NVME_LOG_CHANGED_NSLIST             = 0x04,
     NVME_LOG_CMD_EFFECTS                = 0x05,
     NVME_LOG_PROGRAM_LIST               = 0x82,
+    NVME_LOG_DOWNLOADABLE_PRGM_LIST     = 0x83,
     NVME_LOG_ENDGRP                     = 0x09,
     NVME_LOG_FDP_CONFS                  = 0x20,
     NVME_LOG_FDP_RUH_USAGE              = 0x21,
@@ -1643,6 +1675,17 @@ typedef struct QEMU_PACKED NvmeIdNsZoned {
     uint8_t     vs[256];
 } NvmeIdNsZoned;
 
+typedef struct QEMU_PACKED NvmeIdNsCompute {
+    uint16_t    maxact;
+    uint16_t    maxmemrs;
+    uint16_t    mrsg;
+    uint8_t     maxmemr;
+    uint8_t     reserved;
+    uint64_t    maxpb;
+    uint8_t     lpg;
+    uint8_t     rsvd4079[4079];
+} NvmeIdNsCompute;
+
 enum NvmeIdNsZonedOzcs {
     NVME_ID_NS_ZONED_OZCS_RAZB    = 1 << 0,
     NVME_ID_NS_ZONED_OZCS_ZRWASUP = 1 << 1,
@@ -2057,6 +2100,7 @@ static inline void _nvme_check_size(void)
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlZoned) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsSLM) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlCompute) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsCompute) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlNvm) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAF) != 4);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAFE) != 16);

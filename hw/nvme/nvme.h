@@ -299,6 +299,8 @@ typedef struct NvmeNamespace {
     ComputeProgram    *compute_prgm_arr;
     uint32_t        num_programs;
     uint64_t        program_size;
+    uint8_t         down_prgm_type_list_cnt;
+    DownloadableTypeDescrDS *downloadable_type_list;
 
     NvmeNamespaceParams params;
     NvmeSubsystem *subsys;
@@ -335,6 +337,14 @@ typedef struct ra_rg {
     uint32_t rgid;
     QTAILQ_ENTRY(ra_rg) entry;
 } ra_rg;
+
+
+typedef struct  QEMU_PACKED memory_range_ds {
+    uint32_t mnsid;
+    uint32_t len;
+    uint64_t sb;
+    uint8_t rsvd[16];
+} memory_range_ds;
 
 static inline uint32_t nvme_nsid(NvmeNamespace *ns)
 {
