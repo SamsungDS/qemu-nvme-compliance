@@ -27,6 +27,7 @@
 #define NVME_MAX_CONTROLLERS 256
 #define NVME_MAX_NAMESPACES  256
 #define NVME_EUI64_DEFAULT ((uint64_t)0x5254000000000000)
+#define COMPUTE_DEFAULT_PROGRAM_SIZE (1 * MiB)
 #define NVME_FDP_MAX_EVENTS 63
 #define NVME_FDP_MAXPIDS 128
 #define NVME_MAX_REACHABILITY_GROUP 256
@@ -159,6 +160,12 @@ typedef struct NvmeZone {
     QTAILQ_ENTRY(NvmeZone) entry;
 } NvmeZone;
 
+typedef struct ComputeProgram {
+    uint16_t    pind;
+    ProgramDiscrDS prgm_discr;
+    uint64_t    sba;
+    uint32_t    size;
+} ComputeProgram;
 #define FDP_EVT_MAX 0xff
 #define NVME_FDP_MAX_NS_RUHS 32u
 #define FDPVSS 0
@@ -217,6 +224,14 @@ typedef struct NvmeNamespaceParams {
     uint32_t numzrwa;
     uint64_t zrwas;
     uint64_t zrwafg;
+
+    bool     compute;
+    uint32_t compute_size;
+    uint64_t program_size;
+    bool     device_defined;
+    char     *program_path;
+    char     *host_temp_path;
+    uint32_t prgm_size;
 
     bool     slm;
     uint64_t slm_size;
@@ -279,6 +294,11 @@ typedef struct NvmeNamespace {
 
     uint32_t        rgid;
     uint32_t        rasid;
+    uint8_t         *compute_buf;
+    NvmeIdNsCompute   *id_ns_compute;
+    ComputeProgram    *compute_prgm_arr;
+    uint32_t        num_programs;
+    uint64_t        program_size;
 
     NvmeNamespaceParams params;
     NvmeSubsystem *subsys;

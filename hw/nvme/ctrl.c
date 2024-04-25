@@ -279,6 +279,8 @@ static const uint32_t nvme_cse_acs[256] = {
     [NVME_ADM_CMD_FORMAT_NVM]       = NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_LBCC,
     [NVME_ADM_CMD_DIRECTIVE_RECV]   = NVME_CMD_EFF_CSUPP,
     [NVME_ADM_CMD_DIRECTIVE_SEND]   = NVME_CMD_EFF_CSUPP,
+    [NVME_ADM_CMD_LOAD_PROGRAM]     = NVME_CMD_EFF_CSUPP,
+    [NVME_ADM_CMD_PRGM_ACT_MGMT]    = NVME_CMD_EFF_CSUPP,
 };
 
 static const uint32_t nvme_cse_iocs_none[256];
@@ -5731,6 +5733,31 @@ static uint16_t nvme_cmd_effects(NvmeCtrl *n, uint8_t csi, uint32_t buf_len,
     return nvme_c2h(n, ((uint8_t *)&log) + off, trans_len, req);
 }
 
+static uint16_t nvme_program_list(NvmeCtrl *n, uint8_t rae, uint32_t buf_len,
+                                uint64_t off, NvmeRequest *req)
+{
+    uint32_t nsid = le32_to_cpu(req->cmd.nsid);
+    NvmeNamespace *ns = nvme_ns(n, nsid);
+    ProgramListLog log_page = {0};
+    uint32_t num_desc = ns->num_programs;
+    log_page.numd = num_desc;
+    uint32_t log_hdr_size = sizeof(ProgramListLog);
+    uint32_t descr_size = sizeof(ProgramDiscrDS);
+    uint8_t *list = g_malloc0((num_desc * descr_size) + log_hdr_size);
+    memcpy(list, &log_page, log_hdr_size);
+    uint32_t trans_len;
+
+    for (int i = 0; i < num_desc; i++) {
+        memcpy(list + log_hdr_size + (i * descr_size),
+               &ns->compute_prgm_arr[i].prgm_discr, descr_size);
+    }
+    uint32_t log_page_size = num_desc * descr_size + log_hdr_size;
+    trans_len = MIN(log_page_size - off, buf_len);
+
+    return nvme_c2h(n, (list + off), trans_len, req);
+}
+
+
 static size_t sizeof_fdp_conf_descr(size_t nruh, size_t vss)
 {
     size_t entry_siz = sizeof(NvmeFdpDescrHdr) + nruh * sizeof(NvmeRuhDescr)
@@ -5989,6 +6016,8 @@ static uint16_t nvme_get_log(NvmeCtrl *n, NvmeRequest *req)
         return nvme_reachability_group(n, lsp, len, off, req);
     case NVME_LOG_REACHABILITY_ASSOCIATION:
         return nvme_reachability_associations(n, lsp, len, off, req);
+    case NVME_LOG_PROGRAM_LIST:
+        return nvme_program_list(n, rae, len, off, req);
     case NVME_LOG_ENDGRP:
         return nvme_endgrp_info(n, rae, len, off, req);
     case NVME_LOG_FDP_CONFS:
@@ -6182,7 +6211,9 @@ static uint16_t nvme_identify_ctrl_csi(NvmeCtrl *n, NvmeRequest *req)
         ((NvmeIdCtrlSLM *)&id)->ver = 0x10400; /* Version 1.4 of NVMe Spec.*/
         ((NvmeIdCtrlSLM *)&id)->nms = 0; /* NS management not supported */
         break;
-
+    case NVME_CSI_COMPUTE:
+        ((NvmeIdCtrlCompute *)&id)->ver = 1;
+        break;
     default:
         return NVME_INVALID_FIELD | NVME_DNR;
     }
@@ -6433,7 +6464,7 @@ static uint16_t nvme_identify_nslist_csi(NvmeCtrl *n, NvmeRequest *req,
     }
 
     if (c->csi != NVME_CSI_NVM && c->csi != NVME_CSI_ZONED &&
-        c->csi != NVME_CSI_SLM) {
+        c->csi != NVME_CSI_SLM && c->csi != NVME_CSI_COMPUTE) {
         return NVME_INVALID_FIELD | NVME_DNR;
     }
 
@@ -6539,6 +6570,7 @@ static uint16_t nvme_identify_cmd_set(NvmeCtrl *n, NvmeRequest *req)
     NVME_SET_CSI(*list, NVME_CSI_NVM);
     NVME_SET_CSI(*list, NVME_CSI_ZONED);
     NVME_SET_CSI(*list, NVME_CSI_SLM);
+    NVME_SET_CSI(*list, NVME_CSI_COMPUTE);
 
     return nvme_c2h(n, list, data_len, req);
 }
@@ -7715,6 +7747,211 @@ static uint16_t nvme_dbbuf_config(NvmeCtrl *n, const NvmeRequest *req)
     return NVME_SUCCESS;
 }
 
+static uint16_t nvme_load_program(NvmeCtrl *n, NvmeRequest *req)
+{
+    LoadProgramCmd *lp = (LoadProgramCmd *)&req->cmd;
+    uint8_t sel = lp->sel;
+    uint8_t ptype = lp->ptype;
+    uint16_t pind = le16_to_cpu(lp->pind);
+    uint32_t nsid = le32_to_cpu(lp->nsid);
+    uint32_t psize = le32_to_cpu(lp->psize);
+    NvmeNamespace *ns = nvme_ns(n, nsid);
+    ComputeProgram *program = &(ns->compute_prgm_arr[pind]);
+    uint64_t data_offset = le64_to_cpu(program->sba);
+    uint32_t loff = le32_to_cpu(lp->loff);
+    uint32_t numb = le32_to_cpu(lp->numb);
+    program->size = psize;
+    char *host_temp_path = ns->params.host_temp_path;
+    int n_htp = strlen(host_temp_path);
+    uint16_t status;
+
+    if (unlikely(!ns)) {
+        return NVME_INVALID_FIELD | NVME_DNR;
+    }
+    if (!ns->params.compute) {
+        return NVME_INVALID_FIELD | NVME_DNR;
+    }
+    if (ns->status) {
+        return ns->status;
+    }
+    if (psize > ns->program_size) {
+        return NVME_MAX_PRGM_BYTES_EXCEEDED | NVME_DNR;
+    }
+    req->ns = ns;
+    uint8_t peocc = program->prgm_discr.peocc;
+    if (sel) {
+            if (pind == 0xFFFF) {
+                program = &(ns->compute_prgm_arr[0]);
+                for (int i = 0; i < ns->num_programs; i++, program++) {
+                    peocc = program->prgm_discr.peocc;
+                    if (peocc == 1 || peocc == 2) {
+                        program->prgm_discr.act = 0;
+                        char str[70 + n_htp];
+                        sprintf(str, "%sn-%d_prgm-%d.o",
+                                host_temp_path, nsid, i);
+                        char s[100] = "rm -rf ";
+                        strcat(s, str);
+                        int ret_val = system(s);
+                        if (ret_val == -1) {
+                            return NVME_PRGM_IN_USE;
+                        }
+                        memset(&(ns->compute_prgm_arr[i]),
+                               0, sizeof(ComputeProgram));
+                    }
+                }
+            } else if (peocc == 0) {
+                return NVME_NO_PROGRAM;
+            } else if (peocc == 2) {
+                return NVME_PIND_NOT_DOWNLOADABLE;
+            } else if (peocc == 1) {
+                program->size = 0;
+                char str[70 + n_htp];
+                sprintf(str, "%sn-%d_prgm-%d.o",
+                        host_temp_path, nsid, pind);
+                char s[100] = "rm -rf ";
+                strcat(s, str);
+                int ret_val = system(s);
+                if (ret_val == -1) {
+                    return NVME_PRGM_IN_USE;
+                }
+                memset(&program->prgm_discr, 0, sizeof(ProgramDiscrDS));
+                return NVME_SUCCESS;
+            }
+    } else {
+        if (peocc == 2) {
+            return NVME_PIND_NOT_DOWNLOADABLE;
+        }
+        bool ptype_supp = false;
+        for (int i = 0; i < ns->down_prgm_type_list_cnt; i++) {
+            if (ptype == ns->downloadable_type_list[i].ptype) {
+                ptype_supp = true;
+                break;
+            }
+        }
+        if (!ptype_supp) {
+            return NVME_INVALID_PTYPE;
+        }
+        status = nvme_h2c(n, (uint8_t *)&ns->compute_buf[data_offset + loff],
+                                          numb, req);
+        program->prgm_discr.peocc = 1;
+        program->prgm_discr.pit  = lp->pit;
+        program->prgm_discr.ptype = lp->ptype;
+        program->prgm_discr.pid = lp->pid;
+
+        return status;
+    }
+    return NVME_SUCCESS;
+}
+
+static uint16_t nvme_program_act_mgmt(NvmeCtrl *n, NvmeRequest *req)
+{
+    uint32_t cdw10 = le32_to_cpu(req->cmd.cdw10);
+    uint16_t pind = cdw10 & 0xFFFF;
+    uint8_t sel = ((cdw10 >> 16) & 0xF);
+    uint32_t nsid = le32_to_cpu(req->cmd.nsid);
+    NvmeNamespace *ns = nvme_ns(n, nsid);
+    ComputeProgram *program = NULL;
+    uint8_t peocc = 0;
+    char *host_temp_path = ns->params.host_temp_path;
+    int n_htp = strlen(host_temp_path);
+
+    if (unlikely(!ns)) {
+        return NVME_INVALID_FIELD | NVME_DNR;
+    }
+
+    if (!ns->params.compute) {
+        return NVME_INVALID_FIELD | NVME_DNR;
+    }
+
+    switch (sel) {
+    case 0x0:
+        program = ns->compute_prgm_arr;
+        if (pind == 0xFFFF) {
+            for (int i = 0; i < ns->num_programs; i++, program++) {
+                peocc = program->prgm_discr.peocc;
+                if (peocc == 1 || peocc == 2) {
+                    program->prgm_discr.act = 0;
+                    char str[70 + n_htp];
+                    sprintf(str, "%sn-%d_prgm-%d.o",
+                            host_temp_path, nsid, i);
+                    char s[100] = "rm -rf ";
+                    strcat(s, str);
+                    int ret_val = system(s);
+                    if (ret_val == -1) {
+                        return NVME_PRGM_IN_USE;
+                    }
+                }
+            }
+        } else {
+            program = &(ns->compute_prgm_arr[pind]);
+            peocc = program->prgm_discr.peocc;
+            if (peocc == 0) {
+                return NVME_NO_PROGRAM;
+            }
+            program->prgm_discr.act = 0;
+            char str[70 + n_htp];
+            sprintf(str, "%sn-%d_prgm-%d.o",
+                    host_temp_path, nsid, pind);
+            char s[100] = "rm -rf ";
+            strcat(s, str);
+            int ret_val = system(s);
+            if (ret_val == -1) {
+                return NVME_PRGM_IN_USE;
+            }
+        }
+        return NVME_SUCCESS;
+    case 0x1:
+    {
+        program = &(ns->compute_prgm_arr[pind]);
+        peocc = program->prgm_discr.peocc;
+        if (peocc == 0) {
+            return NVME_NO_PROGRAM;
+        }
+        switch (program->prgm_discr.ptype) {
+        case 0xC0:
+        case 0xC1:
+        {
+            uint32_t size = program->size;
+
+            uint64_t offset = le64_to_cpu(program->sba);
+            char crt_dir[30 + n_htp];
+            sprintf(crt_dir, "mkdir -p %s",
+                    host_temp_path);
+            int ret_val = system(crt_dir);
+            if (ret_val == -1) {
+                return -1;
+            }
+            char s[30 + n_htp];
+            sprintf(s, "%sn-%d_prgm-%d.o",
+                    host_temp_path, nsid, pind);
+            int fd = open(s, O_WRONLY | O_CREAT, 00700);
+            if (fd < 0) {
+                printf("error opening file\n");
+                return -1;
+            }
+            ssize_t wr_bytes = write(fd,
+                                    (uint8_t *)&ns->compute_buf[offset], size);
+            if (wr_bytes < 0) {
+                printf("error writing to file\n");
+                return -1;
+            }
+            program->prgm_discr.act = 1;
+
+        }
+        break;
+        default:
+            return NVME_INVALID_FIELD;
+        }
+            return NVME_SUCCESS;
+    }
+    break;
+    default:
+        return NVME_INVALID_FIELD;
+    }
+
+}
+
+
 static uint16_t nvme_directive_send(NvmeCtrl *n, NvmeRequest *req)
 {
     return NVME_INVALID_FIELD | NVME_DNR;
@@ -7818,6 +8055,10 @@ static uint16_t nvme_admin_cmd(NvmeCtrl *n, NvmeRequest *req)
         return nvme_dbbuf_config(n, req);
     case NVME_ADM_CMD_FORMAT_NVM:
         return nvme_format(n, req);
+    case NVME_ADM_CMD_LOAD_PROGRAM:
+        return nvme_load_program(n, req);
+    case NVME_ADM_CMD_PRGM_ACT_MGMT:
+        return nvme_program_act_mgmt(n, req);
     case NVME_ADM_CMD_DIRECTIVE_SEND:
         return nvme_directive_send(n, req);
     case NVME_ADM_CMD_DIRECTIVE_RECV:

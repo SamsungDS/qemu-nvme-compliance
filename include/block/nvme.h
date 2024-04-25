@@ -622,6 +622,8 @@ enum NvmeAdminCommands {
     NVME_ADM_CMD_FORMAT_NVM     = 0x80,
     NVME_ADM_CMD_SECURITY_SEND  = 0x81,
     NVME_ADM_CMD_SECURITY_RECV  = 0x82,
+    NVME_ADM_CMD_LOAD_PROGRAM   = 0x85,
+    NVME_ADM_CMD_PRGM_ACT_MGMT  = 0x88,
 };
 
 enum NvmeIoCommands {
@@ -740,6 +742,26 @@ typedef struct QEMU_PACKED NvmeRwCmd {
     uint16_t    appmask;
 } NvmeRwCmd;
 
+typedef struct QEMU_PACKED LoadProgramCmd {
+    uint8_t     opcode;
+    uint8_t     flags;
+    uint16_t    cid;
+    uint32_t    nsid;
+    uint32_t    cdw2;
+    uint32_t    cdw3;
+    uint32_t    cdw4;
+    uint32_t    cdw5;
+    NvmeCmdDptr dptr;
+    uint16_t    pind;
+    uint8_t     ptype;
+    uint8_t     sel:1;
+    uint8_t     pit:3;
+    uint8_t     res:4;
+    uint32_t    psize;
+    uint64_t    pid;
+    uint32_t    numb;
+    uint32_t    loff;
+} LoadProgramCmd;
 enum {
     NVME_RW_LR                  = 1 << 15,
     NVME_RW_FUA                 = 1 << 14,
@@ -971,6 +993,25 @@ enum NvmeStatusCodes {
     NVME_NS_NOT_READY           = 0x0082,
     NVME_NS_RESV_CONFLICT       = 0x0083,
     NVME_FORMAT_IN_PROGRESS     = 0x0084,
+    NVME_NAMESPACE_NOT_REACHABLE = 0x0088,
+    NVME_IN_SUFFICIENT_PRGM_RESOURCES = 0x008A,
+    NVME_INVALID_MEMORY_NAMESPACE = 0x008B,
+    NVME_INVALID_MEMORY_RANGE_SET = 0x008C,
+    NVME_INVALID_MEMORY_RANGE_SET_ID = 0x008D,
+    NVME_INVALID_PRGM_DATA      = 0x008E,
+    NVME_INVALID_PRGM_INDEX     = 0x008F,
+    NVME_INVALID_PTYPE          = 0x0090,
+    NVME_MAXIMUM_MEMORY_RANGE_EXCEEDED = 0x0091,
+    NVME_MAX_MRS_EXCEEDED       = 0x0092,
+    NVME_MAX_PRGMS_ACTIVATED    = 0x0093,
+    NVME_MAX_PRGM_BYTES_EXCEEDED = 0x0094,
+    NVME_MRS_IN_USE             = 0x0095,
+    NVME_NO_PROGRAM             = 0x0096,
+    NVME_OVERLAP_MR             = 0x0097,
+    NVME_PROGRAM_NOT_ACTIVE     = 0x0098,
+    NVME_PRGM_IN_USE            = 0x0099,
+    NVME_PIND_NOT_DOWNLOADABLE  = 0x009A,
+    NVME_PRGM_TOO_BIG           = 0x009B,
     NVME_INVALID_CQID           = 0x0100,
     NVME_INVALID_QID            = 0x0101,
     NVME_MAX_QSIZE_EXCEEDED     = 0x0102,
@@ -1118,6 +1159,21 @@ typedef struct NvmeEffectsLog {
     uint8_t     resv[2048];
 } NvmeEffectsLog;
 
+typedef struct ProgramDiscrDS {
+    uint8_t peocc:2;
+    uint8_t act:1;
+    uint8_t pit:3;
+    uint8_t rsvd:2;
+    uint8_t ptype;
+    uint8_t rsvd6[6];
+    uint64_t pid;
+    uint8_t rsvd48[48];
+} ProgramDiscrDS;
+
+typedef struct ProgramListLog {
+    uint32_t numd;
+    uint8_t rsvd[60];
+} ProgramListLog;
 enum {
     NVME_CMD_EFF_CSUPP      = 1 << 0,
     NVME_CMD_EFF_LBCC       = 1 << 1,
@@ -1134,6 +1190,7 @@ enum NvmeLogIdentifier {
     NVME_LOG_FW_SLOT_INFO               = 0x03,
     NVME_LOG_CHANGED_NSLIST             = 0x04,
     NVME_LOG_CMD_EFFECTS                = 0x05,
+    NVME_LOG_PROGRAM_LIST               = 0x82,
     NVME_LOG_ENDGRP                     = 0x09,
     NVME_LOG_FDP_CONFS                  = 0x20,
     NVME_LOG_FDP_RUH_USAGE              = 0x21,
@@ -1270,6 +1327,11 @@ typedef struct NvmeIdCtrlNvm {
     uint64_t    dmsl;
     uint8_t     rsvd16[4080];
 } NvmeIdCtrlNvm;
+
+typedef struct NvmeIdCtrlCompute {
+    uint32_t ver;
+    uint8_t rsvd[4092];
+} NvmeIdCtrlCompute;
 
 enum NvmeIdCtrlOaes {
     NVME_OAES_NS_ATTR   = 1 << 8,
@@ -1558,6 +1620,7 @@ enum NvmeCsi {
     NVME_CSI_NVM                = 0x00,
     NVME_CSI_ZONED              = 0x02,
     NVME_CSI_SLM                = 0x03,
+    NVME_CSI_COMPUTE            = 0x04,
 };
 
 #define NVME_SET_CSI(vec, csi) (vec |= (uint8_t)(1 << (csi)))
@@ -1993,6 +2056,7 @@ static inline void _nvme_check_size(void)
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrl) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlZoned) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdNsSLM) != 4096);
+    QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlCompute) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrlNvm) != 4096);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAF) != 4);
     QEMU_BUILD_BUG_ON(sizeof(NvmeLBAFE) != 16);
