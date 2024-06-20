@@ -160,6 +160,28 @@ typedef struct NvmeZone {
     QTAILQ_ENTRY(NvmeZone) entry;
 } NvmeZone;
 
+#define MAXMEMRS 256 /* Maximum Number of Memory Range Sets */
+#define MAXMEMR 256  /* Maximum Number of Ranges in a Memory Range Set */
+
+typedef struct NvmeMRS_desc {
+    uint16_t rsid;
+    uint32_t nmr;
+    uint8_t rsvd1[10];
+    uint8_t rsvd2[16];
+} NvmeMRS_desc;
+
+typedef struct QEMU_PACKED NvmeMemoryRange {
+    uint32_t mnsid;
+    uint32_t length;
+    uint64_t saddr;
+    uint8_t  rsvd16[16];
+} NvmeMemoryRange;
+
+typedef struct NvmeMemoryRangeSet {
+    uint32_t num_mrd;
+    NvmeMemoryRange mr[MAXMEMR + 1];
+} NvmeMemoryRangeSet;
+
 typedef struct ComputeProgram {
     uint16_t    pind;
     ProgramDiscrDS prgm_discr;
@@ -301,6 +323,7 @@ typedef struct NvmeNamespace {
     uint64_t        program_size;
     uint8_t         down_prgm_type_list_cnt;
     DownloadableTypeDescrDS *downloadable_type_list;
+    NvmeMemoryRangeSet *mrs[MAXMEMRS + 1];
 
     NvmeNamespaceParams params;
     NvmeSubsystem *subsys;
@@ -772,5 +795,5 @@ uint16_t nvme_bounce_mdata(NvmeCtrl *n, void *ptr, uint32_t len,
 void nvme_rw_complete_cb(void *opaque, int ret);
 uint16_t nvme_map_dptr(NvmeCtrl *n, NvmeSg *sg, size_t len,
                        NvmeCmd *cmd);
-
+bool nvme_namespace_reachable(NvmeCtrl *n, uint32_t snsid, uint32_t dnsid);
 #endif /* HW_NVME_NVME_H */

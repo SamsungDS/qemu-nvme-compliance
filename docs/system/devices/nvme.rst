@@ -395,3 +395,65 @@ The namespace may be configured with additional parameters
 
 ``compute.program_size=SIZE`` (default: ``1*1024*1024``)
   Define the maximum program size of each index in units of bytes.
+
+Subsystem Local Memory Namespaces
+---------------------------------
+A namespaces may be "Subsystem" Local Memory as defined by TP 4131 ("Subsystem Local Memory Command Set"). Set
+``slm=on`` on an ``nvme-ns`` device to configure it as a Subsystem Local Memory namespace.
+
+
+The namespace may be configured with additional parameters
+
+``slm.size=UINT32`` (default: ``0``)
+   Define the Subsystem Local Memory size in units of MiB.
+
+``slm.mcl=UINT64`` (default: ``0``)
+   Define the Subsystem Local Memory maximum number of bytes that may
+   be specified in a Memory Copy command.
+
+``slm.mssrl=UINT32`` (default: ``0``)
+  Define the Subsystem Local Memory maximum single source range length 
+  in number of bytes that may be specified in a Memory Copy command in 
+  units of bytes.
+
+``slm.msrc=UINT8`` (default: ``0``)
+  Define the Subsystem Local Memory maximum number of Source Range 
+  entries that may be used to specify source data in a Memory Copy command.
+
+Reachability Architecture in Namespaces (TP 4156)
+-------------------------------------------------
+  Reachability Groups and Associations define the reachability
+  of the namespace to each other as per TP 4156. All namespace
+  will have one reachablity group id and multiple reachability
+  associations. 
+
+``rgid=UINT32`` (default: ``0``)
+   Set the reachability group id this namespace belong to.
+
+``rasid=UINT32`` (default: ``0``)
+   Set the reachability association id this namespace belong to.
+   
+``rasid1=UINT32`` (default: ``0``)
+   Set the reachability association id this namespace belong to.
+   
+``rasid2=UINT32`` (default: ``0``)
+   Set the reachability association id this namespace belong to.
+   
+``rasid3=UINT32`` (default: ``0``)
+   Set the reachability association id this namespace belong to.
+   
+``rasid4=UINT32`` (default: ``0``)
+   Set the reachability association id this namespace belong to.
+   
+``rasid5=UINT32`` (default: ``0``)
+   Set the reachability association id this namespace belong to.   
+
+
+
+
+
+
+
+
+
+

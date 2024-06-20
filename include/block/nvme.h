@@ -624,6 +624,7 @@ enum NvmeAdminCommands {
     NVME_ADM_CMD_SECURITY_RECV  = 0x82,
     NVME_ADM_CMD_LOAD_PROGRAM   = 0x85,
     NVME_ADM_CMD_PRGM_ACT_MGMT  = 0x88,
+    NVME_ADM_CMD_MEMORY_RANGE_SET_MGMT = 0x89,
 };
 
 enum NvmeIoCommands {
@@ -780,6 +781,27 @@ typedef struct QEMU_PACKED ExecProgram {
     uint32_t    cdw14;
     uint32_t    cdw15;
 } ExecProgram;
+
+typedef struct QEMU_PACKED NvmeMemRangeMGMT {
+    uint8_t     opcode;
+    uint8_t     flags;
+    uint16_t    cid;
+    uint32_t    nsid;
+    uint32_t    cdw2;
+    uint32_t    cdw3;
+    uint32_t    cdw4;
+    uint32_t    cdw5;
+    NvmeCmdDptr dptr;
+    uint32_t    select:4;
+    uint32_t    rsvd10:12;
+    uint32_t    mrsid:16;
+    uint32_t    numr;
+    uint32_t    cdw12;
+    uint32_t    cdw13;
+    uint32_t    cdw14;
+    uint32_t    cdw15;
+} NvmeMemRangeMGMT;
+
 enum {
     NVME_RW_LR                  = 1 << 15,
     NVME_RW_FUA                 = 1 << 14,
@@ -1083,6 +1105,11 @@ enum NvmeStatusCodes {
     NVME_NO_COMPLETE            = 0xffff,
 };
 
+enum NvmeMemoryRangeSelect {
+    NVME_MEMORY_RANGE_SET_CREATE = 0x0,
+    NVME_MEMORY_RANGE_SET_DELETE = 0x1,
+};
+
 typedef struct QEMU_PACKED ReachabilityGroup_desc {
     uint32_t rgid;
     uint32_t num_nsid_val;
@@ -1223,6 +1250,7 @@ enum NvmeLogIdentifier {
     NVME_LOG_CMD_EFFECTS                = 0x05,
     NVME_LOG_PROGRAM_LIST               = 0x82,
     NVME_LOG_DOWNLOADABLE_PRGM_LIST     = 0x83,
+    NVME_LOG_MEMORY_RANGE_SET_LIST      = 0x84,
     NVME_LOG_ENDGRP                     = 0x09,
     NVME_LOG_FDP_CONFS                  = 0x20,
     NVME_LOG_FDP_RUH_USAGE              = 0x21,
