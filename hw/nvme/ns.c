@@ -58,6 +58,9 @@ void nvme_ns_init_format(NvmeNamespace *ns)
     id_ns->npda = id_ns->npdg = npdg - 1;
     id_ns_nvm->npdal = npdg;
     id_ns_nvm->npdgl = npdg;
+
+    id_ns_nvm->nors = ns->params.nors;
+    id_ns->nows = ns->params.nows;
 }
 
 static int nvme_ns_init(NvmeNamespace *ns, Error **errp)
@@ -76,7 +79,10 @@ static int nvme_ns_init(NvmeNamespace *ns, Error **errp)
     ns->id_ns.dlfeat = 0x1;
 
     /* support DULBE and I/O optimization fields */
-    id_ns->nsfeat |= (NVME_ID_NS_NSFEAT_DAE | NVME_ID_NS_NSFEAT_OPTPERF_ALL);
+    id_ns->nsfeat |=
+        NVME_ID_NS_NSFEAT_DAE |
+        NVME_ID_NS_NSFEAT_OPTPERF_ALL |
+        NVME_ID_NS_NSFEAT_OPTRPERF;
 
     if (ns->params.shared) {
         id_ns->nmic |= NVME_ID_NS_IND_NMIC_SHRNS;
@@ -815,6 +821,8 @@ static Property nvme_ns_props[] = {
     DEFINE_PROP_UINT16("mssrl", NvmeNamespace, params.mssrl, 128),
     DEFINE_PROP_UINT32("mcl", NvmeNamespace, params.mcl, 128),
     DEFINE_PROP_UINT8("msrc", NvmeNamespace, params.msrc, 127),
+    DEFINE_PROP_UINT16("nows", NvmeNamespace, params.nows, 0),
+    DEFINE_PROP_UINT32("nors", NvmeNamespace, params.nors, 0),
     DEFINE_PROP_BOOL("zoned", NvmeNamespace, params.zoned, false),
     DEFINE_PROP_SIZE("zoned.zone_size", NvmeNamespace, params.zone_size_bs,
                      NVME_DEFAULT_ZONE_SIZE),
