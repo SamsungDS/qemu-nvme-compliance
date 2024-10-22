@@ -8764,6 +8764,7 @@ static void nvme_init_ctrl(NvmeCtrl *n, PCIDevice *pci_dev)
     }
 
     id->ctratt = cpu_to_le32(ctratt);
+    id->oaqd = n->params.oaqd;
 
     NVME_CAP_SET_MQES(cap, n->params.mqes);
     NVME_CAP_SET_CQR(cap, 1);
@@ -8946,6 +8947,7 @@ static Property nvme_props[] = {
     DEFINE_PROP_BOOL("atomic.dn", NvmeCtrl, params.atomic_dn, 0),
     DEFINE_PROP_UINT16("atomic.awun", NvmeCtrl, params.atomic_awun, 0),
     DEFINE_PROP_UINT16("atomic.awupf", NvmeCtrl, params.atomic_awupf, 0),
+    DEFINE_PROP_UINT32("oaqd", NvmeCtrl, params.oaqd, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
