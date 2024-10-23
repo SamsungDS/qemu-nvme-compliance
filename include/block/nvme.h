@@ -1032,13 +1032,16 @@ typedef struct NvmeEffectsLog {
 } NvmeEffectsLog;
 
 enum {
-    NVME_CMD_EFF_CSUPP      = 1 << 0,
-    NVME_CMD_EFF_LBCC       = 1 << 1,
-    NVME_CMD_EFF_NCC        = 1 << 2,
-    NVME_CMD_EFF_NIC        = 1 << 3,
-    NVME_CMD_EFF_CCC        = 1 << 4,
-    NVME_CMD_EFF_CSE_MASK   = 3 << 16,
-    NVME_CMD_EFF_UUID_SEL   = 1 << 19,
+    NVME_CMD_EFF_CSUPP       = 1 << 0,
+    NVME_CMD_EFF_LBCC        = 1 << 1,
+    NVME_CMD_EFF_NCC         = 1 << 2,
+    NVME_CMD_EFF_NIC         = 1 << 3,
+    NVME_CMD_EFF_CCC         = 1 << 4,
+    NVME_CMD_EFF_CSER_MASK   = 3 << 14,
+    NVME_CMD_EFF_CSER_ADMIN  = 1 << 14,
+    NVME_CMD_EFF_CSE_SAME_NS = 1 << 16,
+    NVME_CMD_EFF_CSE_MASK    = 7 << 16,
+    NVME_CMD_EFF_UUID_SEL    = 1 << 19,
 };
 
 enum NvmeLogIdentifier {
